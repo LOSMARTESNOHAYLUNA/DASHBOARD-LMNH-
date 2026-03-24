@@ -440,7 +440,7 @@ const ALLOWED_UID='Zhs1o7sxAWMOkiCsYinSogzdsqd2';
 
 // Datos base del plan financiero (editables desde el dashboard)
 const BASE_FLUJO={
-  retainers:[9182,9182,10038,10333,10333,10333,10333,10333,10333,10333,10333,10333],
+  retainers:[9470,9470,10385,10621,10621,10621,10621,10621,10621,10621,10621,10621],
   web:      [414,2339,3827,700,700,700,700,0,700,0,700,700],
   consultoria:[0,0,0,0,450,450,450,0,450,0,450,450],
   personal: [4676,4676,4676,4876,4876,4876,4876,4876,4876,4876,4876,4876],
@@ -461,7 +461,7 @@ const BASE_CLIENTES=[
   {id:'c7',n:'Avecan',pack:'Google Ads + SEO Ciudad',mrr:801.80,dto:'−5%',desde:'ENE',activo:true},
   {id:'c8',n:'SERDOC',pack:'SEO Local + Setup campaña',mrr:706.80,dto:'−5%',desde:'ENE',activo:true},
   {id:'c9',n:'OLVISSA',pack:'Hosting + Mantenimiento web',mrr:47.20,dto:'−20%',desde:'ENE',activo:true},
-  {id:'c10',n:'ROMIVIC',pack:'Hosting + Mantenimiento web',mrr:61.95,dto:'',desde:'ENE',activo:true},
+  {id:'c10',n:'ROMIVIC',pack:'Hosting + Mantenimiento web + Google Ads',mrr:408.95,dto:'',desde:'ENE',activo:true},
   {id:'c11',n:'Fábrica de Sonrisas',pack:'Pack + Social Booster',mrr:754.30,dto:'−5%',desde:'ABR',activo:true},
   {id:'c12',n:'Medea Estética',pack:'SEO Local',mrr:397.00,dto:'−20%',desde:'ABR',activo:true},
 ];
@@ -705,7 +705,12 @@ function renderD(){
     <div class="kc"><div class="kl">Objetivo 150k</div><div class="kv">${fP(pct)}</div><div class="pb"><div class="pf" style="width:${pct}%"></div></div><div class="ks">${fmt(ytd)} acumulado</div></div>
   `;
   if(bC)bC.destroy();
-  bC=new Chart(document.getElementById('cb'),{type:'bar',data:{labels:MC,datasets:[{label:'Real',data:MC.map((_,i)=>tR(i)?iM[i]:null),backgroundColor:'#7F77DD',borderRadius:3},{label:'Plan',data:MC.map((_,i)=>ingF(i)),backgroundColor:'rgba(135,178,41,0.3)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:false,font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
+  // Barra morada = mes cerrado (con datos reales si los hay, o plan confirmado si no)
+  const dataReal=MC.map((_,i)=>tR(i)?iM[i]:MESES_CERRADOS[i]?iM[i]:null);
+  bC=new Chart(document.getElementById('cb'),{type:'bar',data:{labels:MC,datasets:[
+    {label:'Real',data:dataReal,backgroundColor:'#7F77DD',borderRadius:3},
+    {label:'Plan',data:MC.map((_,i)=>ingF(i)),backgroundColor:'rgba(135,178,41,0.3)',borderRadius:3}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:false,font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
   if(lC)lC.destroy();
   lC=new Chart(document.getElementById('cl'),{type:'line',data:{labels:['Ini',...MC],datasets:[{data:sEv,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.06)',borderWidth:2,pointRadius:2.5,fill:true,tension:0.35}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
   let s2=SALDO0;
