@@ -1351,20 +1351,22 @@ function parseXLS(buf){
         else fd=new Date(s);
       }
       if(!fd||isNaN(fd.getTime()))continue;
-      // Parsear importe — maneja formato europeo (1.234,56) y estándar (1234.56)
+      // Parsear importe — detectar separador decimal por posición
       let imp;
       if(typeof impRaw==='number'){
         imp=impRaw;
       }else{
         const s=String(impRaw).trim();
-        // Si tiene coma Y punto: formato europeo 1.234,56 → quitar puntos, coma→punto
-        // Si tiene solo coma: formato europeo 8,69 → coma→punto
-        // Si tiene solo punto: formato estándar 8.69 → usar tal cual
-        if(s.includes(',')&&s.includes('.')){
+        const lastComma=s.lastIndexOf(',');
+        const lastDot=s.lastIndexOf('.');
+        if(lastComma>lastDot){
+          // Coma es el decimal → formato europeo: "1.234,56" o "8,69"
           imp=parseFloat(s.replace(/\./g,'').replace(',','.'));
-        }else if(s.includes(',')&&!s.includes('.')){
-          imp=parseFloat(s.replace(',','.'));
+        }else if(lastDot>lastComma){
+          // Punto es el decimal → formato estándar: "1,234.56" o "8.69"
+          imp=parseFloat(s.replace(/,/g,''));
         }else{
+          // Sin separadores conocidos
           imp=parseFloat(s.replace(/[^0-9.-]/g,''));
         }
       }
