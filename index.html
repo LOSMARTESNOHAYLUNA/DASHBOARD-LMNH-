@@ -94,7 +94,6 @@ tr:hover td{background:var(--bg3)}
 .b-r{background:var(--li2);color:#3B6D11}.b-p{background:var(--bg3);color:var(--tx2)}
 .b-ok{background:var(--gr2);color:#1B5E20}.b-warn{background:var(--am2);color:var(--am)}.b-info{background:var(--pu3);color:var(--pu)}
 .b-re{background:var(--re2);color:var(--re)}
-.sumrow td{background:var(--bg3)!important;font-weight:500}
 .empty{text-align:center;padding:3rem;color:var(--tx2);font-size:13px}
 .al{padding:10px 14px;border-radius:var(--r8);font-size:12px;margin-bottom:1rem}
 .al-ok{background:var(--gr2);color:#1B5E20;border:.5px solid #A5D6A7}
@@ -512,7 +511,12 @@ async function syncAll(){
   const ad=await fbGet('ads');
   if(ad&&ad.length)ADS=ad;
   else ADS=gLS('lmnhl_ads')||[];
-  // Fallback local
+  // Meses cerrados
+  const mc2=await fbGet('config');
+  if(mc2&&mc2.length){
+    const entry=mc2.find(x=>x._fbid==='meses_cerrados'||x.id==='meses_cerrados');
+    if(entry&&entry.data)MESES_CERRADOS=JSON.parse(entry.data);
+  }
   if(!FLUJO||Object.keys(FLUJO).length===0)FLUJO=JSON.parse(JSON.stringify(BASE_FLUJO));
   if(!CLIENTES||!CLIENTES.length)CLIENTES=JSON.parse(JSON.stringify(BASE_CLIENTES));
   if(!HAC||!HAC.length)HAC=JSON.parse(JSON.stringify(BASE_HAC));
@@ -557,11 +561,38 @@ document.querySelectorAll('.slink').forEach(b=>b.addEventListener('click',()=>{
 }));
 
 // ── HELPERS FLUJO ─────────────────────────────────────────────
+// ── ESTADO DE MESES ───────────────────────────────────────────
+// Un mes solo es "Real" si ha sido explícitamente cerrado por Sheila
+// 'cerrado' = datos confirmados · 'en_curso' = mes actual · 'plan' = futuro
+let MESES_CERRADOS={}; // {0: true, 1: true, ...} índice del mes
+
+const ci_actual=new Date().getMonth(); // marzo = 2
+
+const estadoMes=i=>{
+  if(MESES_CERRADOS[i]) return 'cerrado';
+  if(i===ci_actual) return 'en_curso';
+  if(i<ci_actual) return 'pasado_sin_cerrar';
+  return 'plan';
+};
+
+// Solo usar datos reales de movimientos si el mes está CERRADO
+const tR=i=>MESES_CERRADOS[i]&&MOVS.some(m=>mesI(mesM(m))===i);
+
+async function cerrarMes(i){
+  MESES_CERRADOS[i]=true;
+  await fbSet('config','meses_cerrados',{data:JSON.stringify(MESES_CERRADOS)});
+  renderD();
+}
+async function reabrirMes(i){
+  delete MESES_CERRADOS[i];
+  await fbSet('config','meses_cerrados',{data:JSON.stringify(MESES_CERRADOS)});
+  renderD();
+}
+
 const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0);
 const gstF=i=>(FLUJO.personal[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
-const tR=i=>MOVS.some(m=>mesI(mesM(m))===i);
 const ingR=i=>MOVS.filter(m=>mesI(mesM(m))===i&&['retainer','ingreso_web','ingreso_otro'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
 const gstR=i=>Math.abs(MOVS.filter(m=>mesI(mesM(m))===i&&!['retainer','ingreso_web','ingreso_otro','traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe<0).reduce((s,m)=>s+m.importe,0));
 
@@ -593,7 +624,32 @@ function renderD(){
   if(lC)lC.destroy();
   lC=new Chart(document.getElementById('cl'),{type:'line',data:{labels:['Ini',...MC],datasets:[{data:sEv,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.06)',borderWidth:2,pointRadius:2.5,fill:true,tension:0.35}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
   let s2=SALDO0;
-  document.getElementById('tbl-d').innerHTML=`<table><thead><tr><th>Mes</th><th></th><th>Ingresos</th><th>Gastos</th><th>CF</th><th>vs Plan</th><th>Saldo</th></tr></thead><tbody>${MC.map((m,i)=>{const r=tR(i),ing=iM[i],gst=gM[i],cf=ing-gst;s2+=cf;const vp=r?ing-ingF(i):null;return`<tr><td><strong>${m}</strong></td><td><span class="badge ${r?'b-r':'b-p'}">${r?'Real':'Plan'}</span></td><td>${fmt(ing)}</td><td>${fmt(gst)}</td><td class="${cf>=0?'pos':'neg'}">${fCF(cf)}</td><td>${vp!=null?`<span class="${vp>=0?'pos':'neg'}">${fCF(vp)}</span>`:'—'}</td><td>${fmt(Math.round(s2))}</td></tr>`;}).join('')}</tbody></table>`;
+  const badgeEstado=i=>{
+    const e=estadoMes(i);
+    if(e==='cerrado') return '<span class="badge b-ok">✓ Cerrado</span>';
+    if(e==='en_curso') return '<span class="badge b-warn">En curso</span>';
+    if(e==='pasado_sin_cerrar') return '<span class="badge b-re">Sin cerrar</span>';
+    return '<span class="badge b-p">Plan</span>';
+  };
+  document.getElementById('tbl-d').innerHTML=`<table><thead><tr><th>Mes</th><th>Estado</th><th>Ingresos</th><th>Gastos</th><th>CF</th><th>vs Plan</th><th>Saldo</th><th></th></tr></thead><tbody>${MC.map((m,i)=>{
+    const r=tR(i),ing=iM[i],gst=gM[i],cf=ing-gst;s2+=cf;
+    const vp=r?ing-ingF(i):null;
+    const e=estadoMes(i);
+    const puedesCerrar=e==='en_curso'||e==='pasado_sin_cerrar';
+    const btnCerrar=puedesCerrar?`<button onclick="cerrarMes(${i})" class="btn btn-li" style="padding:2px 8px;font-size:10px;white-space:nowrap">Cerrar mes</button>`:
+      e==='cerrado'?`<button onclick="reabrirMes(${i})" class="btn" style="padding:2px 8px;font-size:10px">Reabrir</button>`:'';
+    return`<tr style="${e==='plan'?'color:var(--tx3)':''}">
+      <td><strong style="${e==='plan'?'color:var(--tx3)':''}">${m}</strong></td>
+      <td>${badgeEstado(i)}</td>
+      <td>${fmt(ing)}</td>
+      <td>${fmt(gst)}</td>
+      <td class="${cf>=0?'pos':'neg'}">${fCF(cf)}</td>
+      <td>${vp!=null?`<span class="${vp>=0?'pos':'neg'}">${fCF(vp)}</span>`:e!=='plan'?'<span style="color:var(--tx3)">—</span>':'<span style="color:var(--tx3)">proyectado</span>'}</td>
+      <td>${fmt(Math.round(s2))}</td>
+      <td>${btnCerrar}</td>
+    </tr>`;
+  }).join('')}</tbody></table>
+  <div class="al al-i" style="margin-top:.75rem;margin-bottom:0">💡 Haz clic en <strong>Cerrar mes</strong> cuando hayas importado el extracto bancario y confirmado todos los datos de ese mes. Solo los meses cerrados muestran datos reales.</div>`;
 }
 
 // ── FLUJO EDITABLE ────────────────────────────────────────────
