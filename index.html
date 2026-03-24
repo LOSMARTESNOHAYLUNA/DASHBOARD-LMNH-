@@ -311,9 +311,27 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
     <!-- HACIENDA -->
     <div data-view="hacienda">
       <div class="ph">
-        <div><div class="ph-title">Hacienda y aplazamientos</div><div class="ph-sub">Editable · añade nuevos aplazamientos cuando surjan</div></div>
-        <div class="ph-actions"><button class="btn btn-p" onclick="openHacWizard()">+ Nuevo aplazamiento</button></div>
+        <div><div class="ph-title">Hacienda y aplazamientos</div><div class="ph-sub">Editable · sube la carta de la AEAT para importar automáticamente</div></div>
+        <div class="ph-actions">
+          <button class="btn btn-li" onclick="document.getElementById('hac-pdf-input').click()">📄 Subir carta AEAT</button>
+          <button class="btn btn-p" onclick="openHacWizard()">+ Nuevo manual</button>
+        </div>
       </div>
+      <input type="file" id="hac-pdf-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="procesarCartaHacienda(this.files[0])">
+
+      <!-- Zona de extracción IA -->
+      <div id="hac-ai-zone" style="display:none">
+        <div class="cc" style="border-left:3px solid var(--li)">
+          <div class="ct">Extrayendo datos de la carta con IA...</div>
+          <div id="hac-ai-status" style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Analizando el documento...</div>
+          <div id="hac-ai-preview"></div>
+          <div class="wact" id="hac-ai-actions" style="display:none">
+            <button class="wsk" onclick="document.getElementById('hac-ai-zone').style.display='none'">Cancelar</button>
+            <button class="btn btn-p" onclick="confirmarAplazamientosIA()">Importar estos aplazamientos</button>
+          </div>
+        </div>
+      </div>
+
       <div class="kg3" id="hac-kpis"></div>
       <div class="cc" style="margin-bottom:0">
         <div class="ct">Calendario de pagos <span id="hac-total-badge"></span></div>
@@ -521,6 +539,29 @@ async function syncAll(){
   if(!CLIENTES||!CLIENTES.length)CLIENTES=JSON.parse(JSON.stringify(BASE_CLIENTES));
   if(!HAC||!HAC.length)HAC=JSON.parse(JSON.stringify(BASE_HAC));
   if(!IRPF_DATA||!IRPF_DATA.length)IRPF_DATA=JSON.parse(JSON.stringify(BASE_IRPF));
+
+  // Marcar como pagados automáticamente los que tienen fecha de plazo pasada
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  HAC.forEach(h=>{
+    if(!h.pagado&&h.plazo&&new Date(h.plazo)<hoy){
+      h.pagado=true;
+      const id=h.id||h._fbid;if(id)fbSet('hacienda',id,{...h});
+    }
+  });
+  IRPF_DATA.forEach(q=>{
+    // El plazo está en texto como "20 Abril 2026" — parseamos solo si no está pagado
+    if(!q.pagado&&q.plazo){
+      const meses={'Enero':0,'Febrero':1,'Marzo':2,'Abril':3,'Mayo':4,'Junio':5,'Julio':6,'Agosto':7,'Septiembre':8,'Octubre':9,'Noviembre':10,'Diciembre':11,'Ene':0,'Feb':1,'Mar':2,'Abr':3,'May':4,'Jun':5,'Jul':6,'Ago':7,'Sep':8,'Oct':9,'Nov':10,'Dic':11};
+      const parts=q.plazo.split(' ');
+      if(parts.length>=3){
+        const dia=parseInt(parts[0]),mes=meses[parts[1]],anio=parseInt(parts[2]);
+        if(!isNaN(dia)&&mes!=null&&!isNaN(anio)){
+          const plazoDate=new Date(anio,mes,dia);
+          if(plazoDate<hoy){q.pagado=true;const id=q.id||q._fbid;if(id)fbSet('irpf',id,{...q});}
+        }
+      }
+    }
+  });
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -830,7 +871,127 @@ async function delAds(i){
   ADS.splice(i,1);sLS('lmnhl_ads',ADS);renderAds();
 }
 
-// ── HACIENDA EDITABLE ─────────────────────────────────────────
+// ── EXTRACCIÓN IA CARTA HACIENDA ─────────────────────────────
+let hacAIData=[];
+
+async function procesarCartaHacienda(file){
+  if(!file)return;
+  const zone=document.getElementById('hac-ai-zone');
+  const status=document.getElementById('hac-ai-status');
+  const preview=document.getElementById('hac-ai-preview');
+  const actions=document.getElementById('hac-ai-actions');
+  zone.style.display='block';
+  status.textContent='Leyendo el documento...';
+  preview.innerHTML='';actions.style.display='none';
+
+  // Convertir a base64
+  const base64=await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+
+  const isPdf=file.type==='application/pdf';
+  const mediaType=isPdf?'application/pdf':file.type||'image/jpeg';
+
+  status.textContent='Analizando con IA — extrayendo cuotas de aplazamiento...';
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:[
+            {
+              type:isPdf?'document':'image',
+              source:{type:'base64',media_type:mediaType,data:base64}
+            },
+            {
+              type:'text',
+              text:`Analiza este documento de la Agencia Tributaria española (AEAT) sobre un aplazamiento de deuda.
+Extrae TODAS las cuotas de pago mensuales que aparecen.
+Responde SOLO con un JSON válido, sin texto adicional, sin markdown, con este formato exacto:
+{
+  "concepto": "descripción breve del aplazamiento",
+  "cuotas": [
+    {"mes": "ENE", "anio": 2026, "importe": 1234.56, "plazo": "2026-01-31"},
+    {"mes": "FEB", "anio": 2026, "importe": 1234.56, "plazo": "2026-02-28"}
+  ]
+}
+Los meses deben estar en formato 3 letras mayúsculas español: ENE FEB MAR ABR MAY JUN JUL AGO SEP OCT NOV DIC.
+Las fechas de plazo en formato YYYY-MM-DD.
+Si no encuentras cuotas de aplazamiento, devuelve {"error": "No se encontraron cuotas de aplazamiento en el documento"}.`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data=await resp.json();
+    const text=data.content?.[0]?.text||'';
+    let parsed;
+    try{parsed=JSON.parse(text.replace(/```json|```/g,'').trim())}
+    catch{parsed={error:'No se pudo interpretar la respuesta de la IA'}}
+
+    if(parsed.error){
+      status.textContent=`⚠️ ${parsed.error}`;
+      preview.innerHTML=`<div class="al al-w">No se detectaron cuotas automáticamente. Usa el botón "Nuevo manual" para añadirlas.</div>`;
+      return;
+    }
+
+    hacAIData=parsed.cuotas||[];
+    status.textContent=`✓ Se han detectado ${hacAIData.length} cuotas de aplazamiento en "${parsed.concepto}"`;
+
+    // Mostrar preview para confirmar
+    preview.innerHTML=`
+      <div class="al al-ok" style="margin-bottom:.75rem">Concepto: <strong>${parsed.concepto}</strong> · Total: ${fmt(hacAIData.reduce((s,c)=>s+c.importe,0))}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Mes</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Plazo</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Importe</th>
+        </tr></thead>
+        <tbody>${hacAIData.map(c=>`<tr>
+          <td style="padding:6px 10px"><strong>${c.mes} ${c.anio}</strong></td>
+          <td style="padding:6px 10px;color:var(--tx2);font-size:11px">${c.plazo}</td>
+          <td style="padding:6px 10px;text-align:right;color:var(--re);font-weight:500">−${fmtD(c.importe)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    `;
+    actions.style.display='flex';
+
+  }catch(e){
+    status.textContent='Error al procesar el documento.';
+    preview.innerHTML=`<div class="al al-w">Error: ${e.message}</div>`;
+  }
+}
+
+async function confirmarAplazamientosIA(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  for(const c of hacAIData){
+    const entry={
+      id:'h'+Date.now()+Math.random().toString(36).slice(2,6),
+      mes:c.mes,
+      concepto:`Aplazamiento AEAT ${c.anio}`,
+      importe:c.importe,
+      plazo:c.plazo,
+      pagado:new Date(c.plazo)<hoy,
+      tipo:'Aplazamiento',
+      notas:'Importado automáticamente desde carta AEAT'
+    };
+    const id=await fbAdd('hacienda',entry)||entry.id;
+    entry._fbid=id;
+    HAC.push(entry);
+  }
+  document.getElementById('hac-ai-zone').style.display='none';
+  hacAIData=[];
+  renderHacienda();
+}
 function renderHacienda(){
   const hac=HAC||BASE_HAC;
   const total=hac.reduce((s,h)=>s+h.importe,0);
