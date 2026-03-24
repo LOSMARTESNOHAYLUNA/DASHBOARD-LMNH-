@@ -280,12 +280,56 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
     <!-- MOVIMIENTOS -->
     <div data-view="movimientos">
       <div class="ph">
-        <div><div class="ph-title">Movimientos</div><div class="ph-sub">Todos los movimientos importados</div></div>
+        <div><div class="ph-title">Movimientos</div><div class="ph-sub">ING + CaixaBank · entrada manual · todas las cuentas</div></div>
         <div class="ph-actions">
+          <button class="btn btn-p" onclick="toggleManualForm()">+ Añadir manual</button>
           <select id="fm" onchange="renderMovs()" class="fi" style="width:auto"><option value="">Todos los meses</option></select>
           <select id="fc" onchange="renderMovs()" class="fi" style="width:auto"><option value="">Todas las categorías</option></select>
+          <select id="fb" onchange="renderMovs()" class="fi" style="width:auto">
+            <option value="">Todas las cuentas</option>
+            <option value="ING Cobros">ING Cobros</option>
+            <option value="ING Pagos">ING Pagos</option>
+            <option value="CaixaBank">CaixaBank</option>
+            <option value="Manual">Manual</option>
+          </select>
         </div>
       </div>
+
+      <!-- Formulario manual -->
+      <div id="manual-form" style="display:none" class="cc">
+        <div class="ct">Añadir movimiento manual</div>
+        <div style="display:grid;grid-template-columns:130px 1fr 1fr 110px;gap:8px;margin-bottom:8px">
+          <div class="fgrp"><label class="fl">Fecha</label><input type="date" id="mv-fecha" class="fi" value="${new Date().toISOString().split('T')[0]}"></div>
+          <div class="fgrp"><label class="fl">Concepto / Descripción</label><input type="text" id="mv-desc" class="fi" placeholder="ej. Transferencia FisioDomicili marzo" oninput="autoDetectCliente(this.value)"></div>
+          <div class="fgrp"><label class="fl">Cliente detectado</label><input type="text" id="mv-cliente" class="fi" placeholder="Se detecta automáticamente"></div>
+          <div class="fgrp"><label class="fl">Importe € <span style="color:var(--tx3)">(+ cobro / − gasto)</span></label><input type="number" id="mv-importe" class="fi" placeholder="ej. 1047.00" step="0.01"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="fgrp"><label class="fl">Cuenta bancaria</label>
+            <select id="mv-cuenta" class="fi">
+              <option value="CaixaBank">CaixaBank</option>
+              <option value="ING Cobros">ING — cuenta cobros</option>
+              <option value="ING Pagos">ING — cuenta pagos</option>
+            </select>
+          </div>
+          <div class="fgrp"><label class="fl">Categoría</label>
+            <select id="mv-cat" class="fi">
+              ${CATS.filter(c=>c.v!=='ignorar'&&c.v!=='traspaso').map(c=>`<option value="${c.v}">${c.l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="fgrp"><label class="fl">Notas</label><input type="text" id="mv-notas" class="fi" placeholder="Opcional"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="wsk" onclick="toggleManualForm()">Cancelar</button>
+          <button class="btn btn-p" onclick="addManualMov()">Guardar movimiento</button>
+        </div>
+        <div class="al al-i" style="margin-top:.75rem;margin-bottom:0">
+          💡 <strong>CaixaBank:</strong> DocRys y FisioDomicili cobran aquí por domiciliación. 
+          También puedes <button onclick="document.getElementById('caxa-input').click()" style="background:none;border:none;color:var(--pu);cursor:pointer;font-family:'Poppins',sans-serif;font-size:12px;text-decoration:underline">importar el extracto de CaixaBank</button> en CSV o Excel.
+          <input type="file" id="caxa-input" accept=".csv,.xls,.xlsx" style="display:none" onchange="importarCaixa(this.files[0])">
+        </div>
+      </div>
+
       <div id="movs"></div>
     </div>
 
@@ -829,17 +873,128 @@ async function toggleCliente(i){
 }
 
 // ── MOVIMIENTOS ───────────────────────────────────────────────
+function toggleManualForm(){
+  const f=document.getElementById('manual-form');
+  f.style.display=f.style.display==='none'?'block':'none';
+  if(f.style.display==='block'){
+    document.getElementById('mv-fecha').value=new Date().toISOString().split('T')[0];
+    document.getElementById('mv-desc').value='';
+    document.getElementById('mv-cliente').value='';
+    document.getElementById('mv-importe').value='';
+    document.getElementById('mv-notas').value='';
+  }
+}
+
+function autoDetectCliente(desc){
+  const et=autoEt(desc,'');
+  const clienteEl=document.getElementById('mv-cliente');
+  const catEl=document.getElementById('mv-cat');
+  if(et.n)clienteEl.value=et.n;
+  if(et.c&&catEl)for(let i=0;i<catEl.options.length;i++){if(catEl.options[i].value===et.c){catEl.selectedIndex=i;break}}
+}
+
+async function addManualMov(){
+  const fecha=document.getElementById('mv-fecha').value;
+  const desc=document.getElementById('mv-desc').value.trim();
+  const cliente=document.getElementById('mv-cliente').value.trim();
+  const importe=parseFloat(document.getElementById('mv-importe').value);
+  const cuenta=document.getElementById('mv-cuenta').value;
+  const cat=document.getElementById('mv-cat').value;
+  const notas=document.getElementById('mv-notas').value.trim();
+  if(!fecha||!desc||isNaN(importe)){alert('Fecha, concepto e importe son obligatorios.');return}
+  const fd=new Date(fecha);
+  const entry={fecha,descripcion:desc,importe,categoria_banco:'Manual',categoria_lmnhl:cat,cliente,mes:MC[fd.getMonth()],saldo:0,cuenta,notas,manual:true,created_at:new Date().toISOString()};
+  const id=await fbAdd('movimientos',entry);if(id)entry._fbid=id;
+  MOVS.push(entry);sLS('lmnhl_movs',MOVS);
+  toggleManualForm();renderMovs();renderD();
+}
+
+async function importarCaixa(file){
+  if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  let rows=[];
+  if(ext==='csv'){
+    const text=await file.text();
+    const lines=text.split('\n').filter(l=>l.trim());
+    const sep=lines[0].includes(';')?';':',';
+    rows=lines.map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,'').trim()));
+  }else{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  }
+  let hdr=-1;
+  for(let i=0;i<Math.min(rows.length,15);i++){const row=rows[i].join(' ').toLowerCase();if(row.includes('fecha')||row.includes('importe')||row.includes('concepto')||row.includes('movimiento')){hdr=i;break}}
+  const dataStart=hdr>=0?hdr+1:1;
+  const headers=hdr>=0?rows[hdr].map(h=>String(h).toLowerCase()):[];
+  const findCol=keys=>{for(const k of keys){const i=headers.findIndex(h=>h.includes(k));if(i>=0)return i}return -1};
+  const colFecha=findCol(['fecha','date','f.valor']);
+  const colDesc=findCol(['concepto','descripcion','descripción','movimiento','operacion']);
+  const colImp=findCol(['importe','cantidad','amount','cargo','abono']);
+  const colSaldo=findCol(['saldo','balance']);
+  const movs=[];
+  for(let i=dataStart;i<rows.length;i++){
+    const row=rows[i];if(!row||row.every(c=>!c))continue;
+    const fechaRaw=colFecha>=0?row[colFecha]:row[0];
+    const descRaw=colDesc>=0?row[colDesc]:row[1];
+    const impRaw=colImp>=0?row[colImp]:row[2];
+    if(!fechaRaw||!impRaw)continue;
+    let fd;
+    if(fechaRaw instanceof Date)fd=fechaRaw;
+    else{const s=String(fechaRaw).replace(/\//g,'-');const parts=s.split('-');if(parts.length===3){fd=parts[0].length===4?new Date(s):new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`);}else fd=new Date(s);}
+    if(!fd||isNaN(fd.getTime()))continue;
+    const imp=parseFloat(String(impRaw).replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''));
+    if(isNaN(imp))continue;
+    const desc=String(descRaw||'');
+    const et=autoEt(desc,'ingreso');
+    movs.push({fecha:fd.toISOString().split('T')[0],descripcion:desc,importe:imp,categoria_banco:'CaixaBank',categoria_lmnhl:et.c,cliente:et.n,mes:MC[fd.getMonth()],saldo:colSaldo>=0?parseFloat(String(row[colSaldo]).replace(',','.'))||0:0,cuenta:'CaixaBank',notas:'',created_at:new Date().toISOString()});
+  }
+  if(!movs.length){alert('No se encontraron movimientos válidos en el archivo de CaixaBank.');return}
+  iBuf=movs;showLb(movs);
+}
+
+async function delMov(fbid){
+  if(!confirm('¿Eliminar este movimiento?'))return;
+  if(fbid)await fbDel('movimientos',fbid);
+  MOVS=MOVS.filter(m=>m._fbid!==fbid);
+  sLS('lmnhl_movs',MOVS);renderMovs();renderD();
+}
+
 function renderMovs(){
-  const fm=document.getElementById('fm'),fc=document.getElementById('fc');if(!fm)return;
+  const fm=document.getElementById('fm'),fc=document.getElementById('fc'),fb=document.getElementById('fb');
+  if(!fm)return;
   const mu=[...new Set(MOVS.map(m=>mesM(m)))],cfm=fm.value;
   fm.innerHTML='<option value="">Todos los meses</option>';MC.filter(m=>mu.includes(m)).forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;fm.appendChild(o)});fm.value=cfm;
   const cu=[...new Set(MOVS.map(m=>m.categoria_lmnhl))],cfc=fc.value;
   fc.innerHTML='<option value="">Todas las categorías</option>';CATS.filter(c=>cu.includes(c.v)).forEach(c=>{const o=document.createElement('option');o.value=c.v;o.textContent=c.l;fc.appendChild(o)});fc.value=cfc;
-  let movs=[...MOVS];if(fm.value)movs=movs.filter(m=>mesM(m)===fm.value);if(fc.value)movs=movs.filter(m=>m.categoria_lmnhl===fc.value);
+  let movs=[...MOVS];
+  if(fm.value)movs=movs.filter(m=>mesM(m)===fm.value);
+  if(fc.value)movs=movs.filter(m=>m.categoria_lmnhl===fc.value);
+  if(fb&&fb.value)movs=movs.filter(m=>(m.cuenta||'ING Cobros')===fb.value);
   movs.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  if(!movs.length){document.getElementById('movs').innerHTML='<div class="empty">📋<br>No hay movimientos. Importa un extracto de ING.</div>';return}
+  if(!movs.length){document.getElementById('movs').innerHTML='<div class="empty">📋<br>No hay movimientos. Importa un extracto o añade uno manualmente.</div>';return}
   const tot=movs.reduce((s,m)=>s+m.importe,0);
-  document.getElementById('movs').innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Cliente</th><th>Importe</th></tr></thead><tbody>${movs.map(m=>{const d=new Date(m.fecha),ci=cI(m.categoria_lmnhl);return`<tr><td style="color:var(--tx2);font-size:11px">${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.descripcion}</td><td><span class="tc ${ci.c}">${ci.l}</span></td><td style="font-size:11px;color:var(--tx2)">${m.cliente||''}</td><td class="${m.importe>=0?'pos':'neg'}">${fmt(m.importe)}</td></tr>`;}).join('')}</tbody><tfoot><tr class="sumrow"><td colspan="4" style="font-size:11px">${movs.length} movimientos</td><td class="${tot>=0?'pos':'neg'}">${fCF(tot)}</td></tr></tfoot></table></div>`;
+  const cuentaBadge=c=>{
+    if(c==='CaixaBank')return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#E3F2FD;color:#0C447C">Caixa</span>';
+    if(c==='ING Pagos')return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#FFEBEE;color:#C62828">ING Pag.</span>';
+    if(c==='Manual')return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#FFF3E0;color:#E65100">Manual</span>';
+    return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#EDE7F6;color:#3C3489">ING</span>';
+  };
+  document.getElementById('movs').innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>Fecha</th><th>Cuenta</th><th>Descripción</th><th>Categoría</th><th>Cliente</th><th>Importe</th><th></th></tr></thead>
+    <tbody>${movs.map(m=>{const d=new Date(m.fecha),ci=cI(m.categoria_lmnhl);return`<tr>
+      <td style="color:var(--tx2);font-size:11px;white-space:nowrap">${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}</td>
+      <td>${cuentaBadge(m.cuenta)}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.descripcion}</td>
+      <td><span class="tc ${ci.c}">${ci.l}</span></td>
+      <td style="font-size:11px;color:var(--tx2)">${m.cliente||''}</td>
+      <td class="${m.importe>=0?'pos':'neg'}">${fmt(m.importe)}</td>
+      <td>${(m.manual||m.cuenta==='CaixaBank'||m.cuenta==='Manual')?`<button onclick="delMov('${m._fbid||''}')" style="font-size:10px;padding:2px 6px;border:.5px solid var(--bd);border-radius:4px;background:none;cursor:pointer;color:var(--tx3)">×</button>`:''}
+      </td>
+    </tr>`;}).join('')}</tbody>
+    <tfoot><tr class="sumrow"><td colspan="5" style="font-size:11px">${movs.length} movimientos</td><td class="${tot>=0?'pos':'neg'}">${fCF(tot)}</td><td></td></tr></tfoot>
+  </table></div>`;
 }
 
 // ── ADS ───────────────────────────────────────────────────────
