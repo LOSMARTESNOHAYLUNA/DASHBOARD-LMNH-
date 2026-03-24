@@ -412,9 +412,32 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
       </div>
       <div class="cc" style="max-width:480px;border-top:3px solid var(--re)">
         <div class="ct">Zona peligrosa</div>
-        <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Elimina todos los movimientos importados. Útil si importaste un archivo con fechas incorrectas y necesitas volver a empezar.</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Elimina todos los movimientos importados. Útil si importaste un archivo con fechas incorrectas.</div>
         <button class="btn btn-re" onclick="limpiarMovimientos()" style="font-size:12px">Borrar todos los movimientos</button>
         <div id="clear-msg" style="font-size:12px;color:var(--gr);margin-top:6px;min-height:18px"></div>
+      </div>
+      <div class="cc" style="max-width:480px;border-top:3px solid var(--am)">
+        <div class="ct">Borrar movimientos de un mes</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Elimina todos los movimientos de un mes concreto para reimportarlo.</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="del-mes-sel" class="fi" style="width:auto">
+            <option value="">Selecciona mes</option>
+            <option value="ENE">ENE — Enero</option>
+            <option value="FEB">FEB — Febrero</option>
+            <option value="MAR">MAR — Marzo</option>
+            <option value="ABR">ABR — Abril</option>
+            <option value="MAY">MAY — Mayo</option>
+            <option value="JUN">JUN — Junio</option>
+            <option value="JUL">JUL — Julio</option>
+            <option value="AGO">AGO — Agosto</option>
+            <option value="SEP">SEP — Septiembre</option>
+            <option value="OCT">OCT — Octubre</option>
+            <option value="NOV">NOV — Noviembre</option>
+            <option value="DIC">DIC — Diciembre</option>
+          </select>
+          <button class="btn btn-re" onclick="borrarMes()" style="font-size:12px;white-space:nowrap">Borrar ese mes</button>
+        </div>
+        <div id="del-mes-msg" style="font-size:12px;color:var(--gr);margin-top:6px;min-height:18px"></div>
       </div>
     </div>
 
@@ -967,8 +990,10 @@ async function importarCaixa(file){
 
 async function delMov(fbid){
   if(!confirm('¿Eliminar este movimiento?'))return;
-  if(fbid)await fbDel('movimientos',fbid);
-  MOVS=MOVS.filter(m=>m._fbid!==fbid);
+  if(fbid&&DB){
+    try{await fbDel('movimientos',fbid)}catch{}
+  }
+  MOVS=MOVS.filter(m=>(m._fbid||m.fecha+'|'+m.descripcion)!==fbid);
   sLS('lmnhl_movs',MOVS);renderMovs();renderD();
 }
 
@@ -1001,8 +1026,7 @@ function renderMovs(){
       <td><span class="tc ${ci.c}">${ci.l}</span></td>
       <td style="font-size:11px;color:var(--tx2)">${m.cliente||''}</td>
       <td class="${m.importe>=0?'pos':'neg'}">${fmt(m.importe)}</td>
-      <td>${(m.manual||m.cuenta==='CaixaBank'||m.cuenta==='Manual')?`<button onclick="delMov('${m._fbid||''}')" style="font-size:10px;padding:2px 6px;border:.5px solid var(--bd);border-radius:4px;background:none;cursor:pointer;color:var(--tx3)">×</button>`:''}
-      </td>
+      <td><button onclick="delMov('${m._fbid||m.fecha+'|'+m.descripcion}')" title="Eliminar" style="font-size:10px;padding:2px 6px;border:.5px solid var(--bd);border-radius:4px;background:none;cursor:pointer;color:var(--tx3)">×</button></td>
     </tr>`;}).join('')}</tbody>
     <tfoot><tr class="sumrow"><td colspan="5" style="font-size:11px">${movs.length} movimientos</td><td class="${tot>=0?'pos':'neg'}">${fCF(tot)}</td><td></td></tr></tfoot>
   </table></div>`;
@@ -1415,19 +1439,29 @@ async function limpiarMovimientos(){
   const msg=document.getElementById('clear-msg');
   msg.textContent='Borrando...';msg.style.color='var(--am)';
   try{
-    // Borrar de Firebase
-    if(DB){
-      const snap=await DB.collection('movimientos').get();
-      const batch=DB.batch();
-      snap.docs.forEach(d=>batch.delete(d.ref));
-      await batch.commit();
-    }
-    // Borrar local
+    if(DB){const snap=await DB.collection('movimientos').get();const batch=DB.batch();snap.docs.forEach(d=>batch.delete(d.ref));await batch.commit();}
     MOVS=[];sLS('lmnhl_movs',[]);
-    msg.textContent=`✓ ${DB?'Eliminados de Firebase y':'Eliminados'} localmente`;
-    msg.style.color='var(--gr)';
-    renderD();
-    setTimeout(()=>{msg.textContent=''},4000);
+    msg.textContent='✓ Todos los movimientos eliminados';msg.style.color='var(--gr)';
+    renderD();setTimeout(()=>{msg.textContent=''},4000);
+  }catch(e){msg.textContent='Error: '+e.message;msg.style.color='var(--re)'}
+}
+
+async function borrarMes(){
+  const mes=document.getElementById('del-mes-sel').value;
+  const msg=document.getElementById('del-mes-msg');
+  if(!mes){msg.textContent='Selecciona un mes primero.';msg.style.color='var(--am)';return}
+  const count=MOVS.filter(m=>m.mes===mes).length;
+  if(!count){msg.textContent=`No hay movimientos en ${mes}.`;msg.style.color='var(--tx2)';return}
+  if(!confirm(`¿Borrar los ${count} movimientos de ${mes}?`))return;
+  msg.textContent='Borrando...';msg.style.color='var(--am)';
+  try{
+    if(DB){
+      const snap=await DB.collection('movimientos').where('mes','==',mes).get();
+      const batch=DB.batch();snap.docs.forEach(d=>batch.delete(d.ref));await batch.commit();
+    }
+    MOVS=MOVS.filter(m=>m.mes!==mes);sLS('lmnhl_movs',MOVS);
+    msg.textContent=`✓ ${count} movimientos de ${mes} eliminados`;msg.style.color='var(--gr)';
+    renderD();setTimeout(()=>{msg.textContent=''},4000);
   }catch(e){msg.textContent='Error: '+e.message;msg.style.color='var(--re)'}
 }
 async function saveCfg(){
