@@ -993,7 +993,7 @@ async function confirmarAplazamientosIA(){
   renderHacienda();
 }
 function renderHacienda(){
-  const hac=HAC||BASE_HAC;
+  const hac=(HAC||BASE_HAC).slice().sort((a,b)=>MC.indexOf(a.mes)-MC.indexOf(b.mes));
   const total=hac.reduce((s,h)=>s+h.importe,0);
   const pagado=hac.filter(h=>h.pagado).reduce((s,h)=>s+h.importe,0);
   const pendiente=total-pagado;
