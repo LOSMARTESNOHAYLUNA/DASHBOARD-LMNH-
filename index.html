@@ -410,6 +410,12 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
           <div id="cfg-msg" style="font-size:12px;color:var(--gr);min-height:18px"></div>
         </div>
       </div>
+      <div class="cc" style="max-width:480px;border-top:3px solid var(--re)">
+        <div class="ct">Zona peligrosa</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Elimina todos los movimientos importados. Útil si importaste un archivo con fechas incorrectas y necesitas volver a empezar.</div>
+        <button class="btn btn-re" onclick="limpiarMovimientos()" style="font-size:12px">Borrar todos los movimientos</button>
+        <div id="clear-msg" style="font-size:12px;color:var(--gr);margin-top:6px;min-height:18px"></div>
+      </div>
     </div>
 
   </main>
@@ -1403,6 +1409,27 @@ function finishWm(){
 
 // ── CONFIG ────────────────────────────────────────────────────
 function loadCfg(){const c=gLS('lmnhl_cfg')||FB_CFG;document.getElementById('fb-apikey').value=c.apiKey||'';document.getElementById('fb-projectid').value=c.projectId||''}
+
+async function limpiarMovimientos(){
+  if(!confirm('¿Seguro que quieres borrar TODOS los movimientos? Esta acción no se puede deshacer.'))return;
+  const msg=document.getElementById('clear-msg');
+  msg.textContent='Borrando...';msg.style.color='var(--am)';
+  try{
+    // Borrar de Firebase
+    if(DB){
+      const snap=await DB.collection('movimientos').get();
+      const batch=DB.batch();
+      snap.docs.forEach(d=>batch.delete(d.ref));
+      await batch.commit();
+    }
+    // Borrar local
+    MOVS=[];sLS('lmnhl_movs',[]);
+    msg.textContent=`✓ ${DB?'Eliminados de Firebase y':'Eliminados'} localmente`;
+    msg.style.color='var(--gr)';
+    renderD();
+    setTimeout(()=>{msg.textContent=''},4000);
+  }catch(e){msg.textContent='Error: '+e.message;msg.style.color='var(--re)'}
+}
 async function saveCfg(){
   const k=document.getElementById('fb-apikey').value.trim(),p=document.getElementById('fb-projectid').value.trim();
   if(!k||!p)return;
