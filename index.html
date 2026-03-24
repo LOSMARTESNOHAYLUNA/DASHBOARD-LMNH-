@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -97,6 +98,19 @@ input[type=number],input[type=text],input[type=date]{font-family:'Poppins',sans-
 .empty{text-align:center;padding:3rem;color:var(--tx2);font-size:13px}
 pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
 .sep{height:.5px;background:var(--bd);margin:1rem 0}
+/* LOGIN */
+.login-wrap{position:fixed;inset:0;background:var(--pu2);display:flex;align-items:center;justify-content:center;z-index:999}
+.login-wrap.hide{display:none}
+.login-box{background:var(--bg2);border-radius:var(--r12);padding:2.5rem;width:100%;max-width:380px;text-align:center}
+.login-logo{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--pu);margin-bottom:.25rem}
+.login-logo span{color:var(--li)}
+.login-title{font-size:16px;font-weight:500;color:var(--tx);margin-bottom:.25rem;margin-top:1.25rem}
+.login-sub{font-size:12px;color:var(--tx2);margin-bottom:1.75rem}
+.login-input{width:100%;padding:10px 14px;border:.5px solid var(--bd);border-radius:var(--r8);font-size:13px;font-family:'Poppins',sans-serif;color:var(--tx);outline:none;margin-bottom:.75rem;background:var(--bg2)}
+.login-input:focus{border-color:var(--pu)}
+.login-btn{width:100%;padding:11px;background:var(--pu);color:#fff;border:none;border-radius:var(--r8);font-size:13px;font-weight:500;font-family:'Poppins',sans-serif;cursor:pointer;margin-top:.25rem}
+.login-btn:hover{background:#6e3d9a}
+.login-err{font-size:12px;color:var(--re);margin-top:.75rem;min-height:18px}
 /* Ads form */
 .ads-form{background:var(--bg2);border:.5px solid var(--bd);border-radius:var(--r12);padding:1.25rem;margin-bottom:1.25rem}
 .ads-form-grid{display:grid;grid-template-columns:1fr 1fr 120px 120px auto;gap:8px;align-items:end;margin-bottom:.5rem}
@@ -128,10 +142,27 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
   <div class="nav-right">
     <span class="nav-mes" id="nav-mes">2026</span>
     <button class="nav-btn" onclick="openW()">+ Registrar mes</button>
+    <button onclick="doLogout()" style="font-size:11px;color:rgba(255,255,255,.5);background:none;border:none;cursor:pointer;padding:0 4px">Salir</button>
   </div>
 </nav>
 
-<div class="app">
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">Los Martes No Hay <span>Luna</span></div>
+    <div style="width:48px;height:48px;background:var(--pu3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:1.25rem auto 0">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#582D81" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div class="login-title">Control Financiero 2026</div>
+    <div class="login-sub">Acceso privado · LMNHL</div>
+    <input class="login-input" type="email" id="login-email" placeholder="tu@email.com" value="losmartesnohayluna@gmail.com">
+    <input class="login-input" type="password" id="login-pass" placeholder="Contraseña" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none;grid-template-columns:220px 1fr">
   <aside class="sidebar">
     <div class="slabel">Resumen</div>
     <nav class="snav">
@@ -424,14 +455,51 @@ const gLS=k=>{try{return JSON.parse(localStorage.getItem(k))||null}catch{return 
 const sLS=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 
 const FB_CFG={apiKey:"AIzaSyB1V-EMe3JYbYj9hkb7RXI0iwqmCtHKI_M",authDomain:"money-lmnhl.firebaseapp.com",projectId:"money-lmnhl",storageBucket:"money-lmnhl.firebasestorage.app",messagingSenderId:"72067453212",appId:"1:72067453212:web:322ee94469bae78a586ad9"};
+const ALLOWED_UID="Zhs1o7sxAWMOkiCsYinSogzdsqd2";
+
+let AUTH=null;
 
 function initFirebase(cfg){
   try{
-    if(firebase.apps.length)firebase.apps.forEach(a=>a.delete());
+    if(typeof firebase==='undefined')return false;
+    if(firebase.apps.length)firebase.apps.forEach(a=>{try{a.delete()}catch{}});
     firebase.initializeApp(cfg);
     DB=firebase.firestore();
+    if(typeof firebase.auth==='function'){
+      AUTH=firebase.auth();
+    }
     return true;
-  }catch(e){DB=null;return false}
+  }catch(e){console.error('Firebase init error:',e);DB=null;AUTH=null;return false}
+}
+
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  const errEl=document.getElementById('login-err');
+  errEl.textContent='';
+  try{
+    const cred=await AUTH.signInWithEmailAndPassword(email,pass);
+    if(cred.user.uid!==ALLOWED_UID){
+      await AUTH.signOut();
+      errEl.textContent='Acceso no autorizado.';return;
+    }
+    showApp();
+  }catch(e){
+    errEl.textContent=e.code==='auth/wrong-password'||e.code==='auth/user-not-found'?'Email o contraseña incorrectos.':'Error al iniciar sesión.';
+  }
+}
+
+async function doLogout(){
+  await AUTH.signOut();
+  document.getElementById('login-wrap').classList.remove('hide');
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('login-pass').value='';
+}
+
+function showApp(){
+  document.getElementById('login-wrap').classList.add('hide');
+  document.getElementById('main-app').style.display='grid';
+  load().then(()=>renderD());
 }
 
 async function load(){
@@ -775,7 +843,28 @@ function loadCfg(){const c=gLS('lmnhl_cfg')||FB_CFG;document.getElementById('fb-
 async function saveCfg(){const k=document.getElementById('fb-apikey').value.trim(),p=document.getElementById('fb-projectid').value.trim();if(!k||!p)return;const cfg={...FB_CFG,apiKey:k,projectId:p,authDomain:`${p}.firebaseapp.com`};sLS('lmnhl_cfg',cfg);const ok=initFirebase(cfg);document.getElementById('cfg-msg').textContent=ok?'✓ Reconectado':'Error — revisa las claves';setTimeout(()=>{document.getElementById('cfg-msg').textContent=''},3000)}
 
 // ── INIT ──────────────────────────────────────────────────────
-load().then(()=>{renderD()});
+function startApp(){
+  const ok=initFirebase(FB_CFG);
+  if(!ok||!AUTH){
+    document.getElementById('login-wrap').classList.remove('hide');
+    document.getElementById('main-app').style.display='none';
+    return;
+  }
+  AUTH.onAuthStateChanged(user=>{
+    if(user&&user.uid===ALLOWED_UID){
+      showApp();
+    }else{
+      document.getElementById('login-wrap').classList.remove('hide');
+      document.getElementById('main-app').style.display='none';
+    }
+  });
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', startApp);
+}else{
+  startApp();
+}
 </script>
 </body>
 </html>
