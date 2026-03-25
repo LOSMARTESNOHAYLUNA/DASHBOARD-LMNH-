@@ -420,6 +420,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
         <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Cada vez que corriges una categoría el sistema aprende ese patrón. Aquí puedes ver y eliminar las reglas guardadas.</div>
         <div id="reglas-list"></div>
       </div>
+      <div class="cc" style="max-width:480px;border-top:3px solid var(--re)">
         <div class="ct">Zona peligrosa</div>
         <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Elimina todos los movimientos importados. Útil si importaste un archivo con fechas incorrectas.</div>
         <button class="btn btn-re" onclick="limpiarMovimientos()" style="font-size:12px">Borrar todos los movimientos</button>
@@ -1604,17 +1605,26 @@ async function saveCfg(){
 function startApp(){
   const cfg=gLS('lmnhl_cfg');
   if(!cfg||!cfg.apiKey){
-    // Primera vez — mostrar pantalla de configuración de claves
+    // Sin claves — mostrar dashboard con datos del plan y aviso
     document.getElementById('login-wrap').classList.add('hide');
     document.getElementById('main-app').style.display='grid';
-    document.querySelectorAll('.slink').forEach(x=>x.classList.remove('on'));
-    document.querySelectorAll('[data-view]').forEach(x=>x.classList.remove('on'));
-    document.querySelector('[data-nav="config"]').classList.add('on');
-    document.querySelector('[data-view="config"]').classList.add('on');
-    document.getElementById('fb-status').textContent='Sin configurar';
-    document.getElementById('fb-status').style.color='var(--am)';
-    document.getElementById('cfg-msg').textContent='⚠️ Introduce tus credenciales de Firebase para empezar.';
-    document.getElementById('cfg-msg').style.color='var(--am)';
+    FLUJO=JSON.parse(JSON.stringify(BASE_FLUJO));
+    CLIENTES=JSON.parse(JSON.stringify(BASE_CLIENTES));
+    HAC=JSON.parse(JSON.stringify(BASE_HAC));
+    IRPF_DATA=JSON.parse(JSON.stringify(BASE_IRPF));
+    MOVS=gLS('lmnhl_movs')||[];
+    ADS=gLS('lmnhl_ads')||[];
+    renderD();
+    document.getElementById('nav-mes').textContent=`${MES[new Date().getMonth()]} 2026`;
+    // Aviso en el dashboard
+    const kpis=document.getElementById('kpis');
+    if(kpis){
+      const aviso=document.createElement('div');
+      aviso.className='al al-w';
+      aviso.style.gridColumn='1/-1';
+      aviso.innerHTML='⚠️ Firebase no configurado — los datos no se sincronizan. Ve a <strong>Configuración</strong> e introduce tus claves.';
+      kpis.parentNode.insertBefore(aviso,kpis);
+    }
     return;
   }
   const ok=initFB(cfg);
