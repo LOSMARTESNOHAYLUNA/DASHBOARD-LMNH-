@@ -600,17 +600,26 @@ function autoEt(d,cb){
 // ── FIREBASE ──────────────────────────────────────────────────
 // Credenciales Firebase — NO se guardan en el código
 // Se introducen desde ⚙️ Configuración y se guardan en localStorage
-const FB_CFG_EMPTY_EMPTY={apiKey:'',authDomain:'',projectId:'',storageBucket:'',messagingSenderId:'',appId:''};
+const FB_CFG_EMPTY={apiKey:'',authDomain:'',projectId:'',storageBucket:'',messagingSenderId:'',appId:''};
 
 function initFB(cfg){
   try{
     if(typeof firebase==='undefined')return false;
-    if(firebase.apps.length)firebase.apps.forEach(a=>{try{a.delete()}catch{}});
-    firebase.initializeApp(cfg);
-    DB=firebase.firestore();
-    AUTH=typeof firebase.auth==='function'?firebase.auth():null;
+    if(!cfg||!cfg.apiKey||!cfg.projectId)return false;
+    // Reusar app existente o crear nueva
+    let app;
+    if(firebase.apps.length){
+      app=firebase.apps[0];
+    }else{
+      app=firebase.initializeApp(cfg);
+    }
+    DB=firebase.firestore(app);
+    AUTH=firebase.auth(app);
     return true;
-  }catch(e){DB=null;AUTH=null;return false}
+  }catch(e){
+    console.error('Firebase init error:',e);
+    DB=null;AUTH=null;return false;
+  }
 }
 
 async function fbGet(col){if(!DB)return null;try{const s=await DB.collection(col).get();return s.docs.map(d=>({...d.data(),_fbid:d.id}))}catch{return null}}
@@ -684,24 +693,40 @@ async function doLogin(){
   const email=document.getElementById('login-email').value.trim();
   const pass=document.getElementById('login-pass').value;
   const err=document.getElementById('login-err');
+  const btn=document.querySelector('.login-btn');
   err.textContent='';
-  // Si AUTH no está listo, intentar inicializar de nuevo
+  btn.textContent='Conectando...';btn.disabled=true;
+
+  // Asegurar que Firebase está inicializado
   if(!AUTH){
     const cfg=gLS('lmnhl_cfg');
-    if(cfg&&cfg.apiKey){
-      initFB(cfg);
-      // Esperar hasta 3 segundos a que AUTH esté disponible
-      let intentos=0;
-      while(!AUTH&&intentos<30){await new Promise(r=>setTimeout(r,100));intentos++;}
+    if(!cfg||!cfg.apiKey){
+      err.textContent='Introduce las claves de Firebase en Configuración primero.';
+      btn.textContent='Entrar';btn.disabled=false;return;
     }
+    initFB(cfg);
+    // Esperar hasta 4 segundos
+    let t=0;
+    while(!AUTH&&t<40){await new Promise(r=>setTimeout(r,100));t++;}
   }
-  if(!AUTH){err.textContent='Error de conexión con Firebase. Revisa las claves en Configuración.';return}
+
+  if(!AUTH){
+    err.textContent='No se pudo conectar a Firebase. Verifica las claves en Configuración.';
+    btn.textContent='Entrar';btn.disabled=false;return;
+  }
+
   try{
     const c=await AUTH.signInWithEmailAndPassword(email,pass);
-    if(c.user.uid!==ALLOWED_UID){await AUTH.signOut();err.textContent='Acceso no autorizado.';return}
+    if(c.user.uid!==ALLOWED_UID){
+      await AUTH.signOut();
+      err.textContent='Acceso no autorizado.';
+      btn.textContent='Entrar';btn.disabled=false;return;
+    }
     showApp();
   }catch(e){
-    err.textContent=e.code==='auth/wrong-password'||e.code==='auth/user-not-found'||e.code==='auth/invalid-credential'?'Email o contraseña incorrectos.':'Error al iniciar sesión: '+e.code;
+    const msgs={'auth/wrong-password':'Contraseña incorrecta.','auth/user-not-found':'Email no encontrado.','auth/invalid-credential':'Email o contraseña incorrectos.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos.'};
+    err.textContent=msgs[e.code]||`Error: ${e.code}`;
+    btn.textContent='Entrar';btn.disabled=false;
   }
 }
 async function doLogout(){
