@@ -685,12 +685,24 @@ async function doLogin(){
   const pass=document.getElementById('login-pass').value;
   const err=document.getElementById('login-err');
   err.textContent='';
-  if(!AUTH){err.textContent='Firebase no disponible.';return}
+  // Si AUTH no está listo, intentar inicializar de nuevo
+  if(!AUTH){
+    const cfg=gLS('lmnhl_cfg');
+    if(cfg&&cfg.apiKey){
+      initFB(cfg);
+      // Esperar hasta 3 segundos a que AUTH esté disponible
+      let intentos=0;
+      while(!AUTH&&intentos<30){await new Promise(r=>setTimeout(r,100));intentos++;}
+    }
+  }
+  if(!AUTH){err.textContent='Error de conexión con Firebase. Revisa las claves en Configuración.';return}
   try{
     const c=await AUTH.signInWithEmailAndPassword(email,pass);
     if(c.user.uid!==ALLOWED_UID){await AUTH.signOut();err.textContent='Acceso no autorizado.';return}
     showApp();
-  }catch(e){err.textContent=e.code==='auth/wrong-password'||e.code==='auth/user-not-found'?'Email o contraseña incorrectos.':'Error al iniciar sesión.'}
+  }catch(e){
+    err.textContent=e.code==='auth/wrong-password'||e.code==='auth/user-not-found'||e.code==='auth/invalid-credential'?'Email o contraseña incorrectos.':'Error al iniciar sesión: '+e.code;
+  }
 }
 async function doLogout(){
   if(AUTH)await AUTH.signOut();
@@ -1621,6 +1633,10 @@ async function saveCfg(){
 
 // ── INIT ──────────────────────────────────────────────────────
 function startApp(){
+  // Esperar a que Firebase esté disponible en el DOM
+  if(typeof firebase==='undefined'){
+    setTimeout(startApp,150);return;
+  }
   const cfg=gLS('lmnhl_cfg');
   if(!cfg||!cfg.apiKey){
     // Sin claves — mostrar dashboard con datos del plan y aviso
