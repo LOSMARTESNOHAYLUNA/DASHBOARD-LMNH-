@@ -598,9 +598,14 @@ function autoEt(d,cb){
 }
 
 // ── FIREBASE ──────────────────────────────────────────────────
-// Credenciales Firebase — NO se guardan en el código
-// Se introducen desde ⚙️ Configuración y se guardan en localStorage
-const FB_CFG_EMPTY={apiKey:'',authDomain:'',projectId:'',storageBucket:'',messagingSenderId:'',appId:''};
+const FB_CFG_EMPTY={
+  apiKey:'AIzaSyB1V-EMe3JYbYj9hkb7RXI0iwqmCtHKI_M',
+  authDomain:'money-lmnhl.firebaseapp.com',
+  projectId:'money-lmnhl',
+  storageBucket:'money-lmnhl.firebasestorage.app',
+  messagingSenderId:'72067453212',
+  appId:'1:72067453212:web:322ee94469bae78a586ad9'
+};
 
 function initFB(cfg){
   try{
@@ -1662,13 +1667,13 @@ function startApp(){
   if(typeof firebase==='undefined'){
     setTimeout(startApp,150);return;
   }
-  const cfg=gLS('lmnhl_cfg');
+  const cfg=gLS('lmnhl_cfg')||FB_CFG_EMPTY;
   if(!cfg||!cfg.apiKey){
     // Sin claves — mostrar login con formulario de configuración
     mostrarSetupEnLogin();
     return;
   }
-  const ok=initFB(cfg);
+  const ok=initFB(cfg||FB_CFG_EMPTY);
   if(!ok||!AUTH){
     mostrarSetupEnLogin('Las claves guardadas no funcionaron. Vuelve a introducirlas.');
     return;
