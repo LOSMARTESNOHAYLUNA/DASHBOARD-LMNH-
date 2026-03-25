@@ -1664,37 +1664,56 @@ function startApp(){
   }
   const cfg=gLS('lmnhl_cfg');
   if(!cfg||!cfg.apiKey){
-    // Sin claves — mostrar dashboard con datos del plan y aviso
-    document.getElementById('login-wrap').classList.add('hide');
-    document.getElementById('main-app').style.display='grid';
-    FLUJO=JSON.parse(JSON.stringify(BASE_FLUJO));
-    CLIENTES=JSON.parse(JSON.stringify(BASE_CLIENTES));
-    HAC=JSON.parse(JSON.stringify(BASE_HAC));
-    IRPF_DATA=JSON.parse(JSON.stringify(BASE_IRPF));
-    MOVS=gLS('lmnhl_movs')||[];
-    ADS=gLS('lmnhl_ads')||[];
-    renderD();
-    document.getElementById('nav-mes').textContent=`${MES[new Date().getMonth()]} 2026`;
-    // Aviso en el dashboard
-    const kpis=document.getElementById('kpis');
-    if(kpis){
-      const aviso=document.createElement('div');
-      aviso.className='al al-w';
-      aviso.style.gridColumn='1/-1';
-      aviso.innerHTML='⚠️ Firebase no configurado — los datos no se sincronizan. Ve a <strong>Configuración</strong> e introduce tus claves.';
-      kpis.parentNode.insertBefore(aviso,kpis);
-    }
+    // Sin claves — mostrar login con formulario de configuración
+    mostrarSetupEnLogin();
     return;
   }
   const ok=initFB(cfg);
   if(!ok||!AUTH){
-    document.getElementById('login-wrap').classList.remove('hide');
+    mostrarSetupEnLogin('Las claves guardadas no funcionaron. Vuelve a introducirlas.');
     return;
   }
   AUTH.onAuthStateChanged(user=>{
     if(user&&user.uid===ALLOWED_UID) showApp();
     else{document.getElementById('login-wrap').classList.remove('hide');document.getElementById('main-app').style.display='none'}
   });
+}
+
+function mostrarSetupEnLogin(msg){
+  const wrap=document.getElementById('login-wrap');
+  wrap.classList.remove('hide');
+  const box=wrap.querySelector('.login-box');
+  box.innerHTML=`
+    <div class="login-logo">Los Martes No Hay <span>Luna</span></div>
+    <div class="login-title" style="margin-top:1rem">Primera configuración</div>
+    <div class="login-sub">${msg||'Introduce las claves de Firebase para continuar. Solo necesitas hacerlo una vez.'}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;text-align:left;margin-bottom:1rem">
+      <div><label style="font-size:11px;color:#7a6f85">API Key *</label><input class="login-input" id="s-apikey" type="text" placeholder="AIzaSy..." style="margin-bottom:0"></div>
+      <div><label style="font-size:11px;color:#7a6f85">Project ID *</label><input class="login-input" id="s-projectid" type="text" placeholder="money-lmnhl" style="margin-bottom:0"></div>
+      <div><label style="font-size:11px;color:#7a6f85">Auth Domain</label><input class="login-input" id="s-authdomain" type="text" placeholder="money-lmnhl.firebaseapp.com" style="margin-bottom:0"></div>
+      <div><label style="font-size:11px;color:#7a6f85">Messaging Sender ID</label><input class="login-input" id="s-senderid" type="text" placeholder="72067453212" style="margin-bottom:0"></div>
+      <div><label style="font-size:11px;color:#7a6f85">App ID</label><input class="login-input" id="s-appid" type="text" placeholder="1:72067453212:web:..." style="margin-bottom:0"></div>
+    </div>
+    <button class="login-btn" onclick="guardarYConectar()">Guardar y conectar</button>
+    <div class="login-err" id="setup-err"></div>
+  `;
+}
+
+function guardarYConectar(){
+  const k=document.getElementById('s-apikey').value.trim();
+  const p=document.getElementById('s-projectid').value.trim();
+  const err=document.getElementById('setup-err');
+  if(!k||!p){err.textContent='API Key y Project ID son obligatorios.';return}
+  const cfg={
+    apiKey:k,projectId:p,
+    authDomain:document.getElementById('s-authdomain').value.trim()||`${p}.firebaseapp.com`,
+    storageBucket:`${p}.firebasestorage.app`,
+    messagingSenderId:document.getElementById('s-senderid').value.trim()||'',
+    appId:document.getElementById('s-appid').value.trim()||''
+  };
+  sLS('lmnhl_cfg',cfg);
+  err.style.color='var(--gr)';err.textContent='Guardado. Recargando...';
+  setTimeout(()=>location.reload(),700);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startApp);
 else startApp();
