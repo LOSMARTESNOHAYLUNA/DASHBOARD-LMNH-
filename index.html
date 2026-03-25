@@ -1053,6 +1053,8 @@ function renderMovs(){
   movs.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   if(!movs.length){document.getElementById('movs').innerHTML='<div class="empty">📋<br>No hay movimientos. Importa un extracto o añade uno manualmente.</div>';return}
   const tot=movs.reduce((s,m)=>s+m.importe,0);
+  const totPos=movs.filter(m=>m.importe>0).reduce((s,m)=>s+m.importe,0);
+  const totNeg=movs.filter(m=>m.importe<0).reduce((s,m)=>s+m.importe,0);
   const cuentaBadge=c=>{
     if(c==='CaixaBank')return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#E3F2FD;color:#0C447C">Caixa</span>';
     if(c==='ING Pagos')return'<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#FFEBEE;color:#C62828">ING Pag.</span>';
@@ -1089,7 +1091,23 @@ function renderMovs(){
         <td><button onclick="delMov('${mid}')" title="Eliminar" style="font-size:10px;padding:2px 6px;border:.5px solid var(--bd);border-radius:4px;background:none;cursor:pointer;color:var(--tx3)">×</button></td>
       </tr>`;
     }).join('')}</tbody>
-    <tfoot><tr class="sumrow"><td colspan="5" style="font-size:11px">${movs.length} movimientos</td><td class="${tot>=0?'pos':'neg'}">${fCF(tot)}</td><td></td></tr></tfoot>
+    <tfoot>
+      <tr class="sumrow">
+        <td colspan="5" style="font-size:11px">${movs.length} movimientos</td>
+        <td class="pos" style="white-space:nowrap">${fmt(totPos)}</td>
+        <td></td>
+      </tr>
+      <tr class="sumrow">
+        <td colspan="5" style="font-size:11px;color:var(--tx2)">Gastos</td>
+        <td class="neg" style="white-space:nowrap">${fmt(totNeg)}</td>
+        <td></td>
+      </tr>
+      <tr class="sumrow" style="background:var(--pu3)">
+        <td colspan="5" style="font-size:11px;font-weight:600;color:var(--pu)">Neto</td>
+        <td class="${tot>=0?'pos':'neg'}" style="white-space:nowrap;font-weight:600">${fCF(tot)}</td>
+        <td></td>
+      </tr>
+    </tfoot>
   </table></div>`;
   // Guardar referencia a movs filtrados para edición
   window._movsActuales=movs;
@@ -1436,7 +1454,8 @@ function parseXLS(buf){
     for(let i=hdr+1;i<raw.length;i++){
       const row=raw[i];
       const fechaRaw=row[0],catB=row[1],desc=row[3],impRaw=row[5];
-      if(!fechaRaw||impRaw===''||impRaw===undefined||impRaw===null)continue;
+      // impRaw puede ser negativo (gasto) — solo saltar si es vacío o undefined
+      if(!fechaRaw||impRaw===''||impRaw===undefined||impRaw===null||impRaw===0)continue;
       // Fecha: viene como Date gracias a cellDates:true
       let fd;
       if(fechaRaw instanceof Date){fd=fechaRaw;}
@@ -1594,11 +1613,10 @@ async function saveCfg(){
     appId:ai&&ai.value.trim()||''
   };
   sLS('lmnhl_cfg',cfg);
-  const ok=initFB(cfg);
   const msg=document.getElementById('cfg-msg');
-  msg.textContent=ok?'✓ Conectado correctamente':'Error — revisa las claves';
-  msg.style.color=ok?'var(--gr)':'var(--re)';
-  setTimeout(()=>{msg.textContent=''},4000);
+  msg.textContent='Guardado. Recargando...';
+  msg.style.color='var(--gr)';
+  setTimeout(()=>location.reload(),800);
 }
 
 // ── INIT ──────────────────────────────────────────────────────
