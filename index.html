@@ -869,36 +869,80 @@ function renderFlujo(){
     {k:'hacienda',l:'Hacienda',tipo:'gst'},
     {k:'social_ads',l:'Ads propias',tipo:'gst'},
   ];
-  let saldo=SALDO0;
   const ingRows=fields.filter(f=>f.tipo==='ing');
   const gstRows=fields.filter(f=>f.tipo==='gst');
+  const headerMeses=MC.map(m=>`<th style="min-width:85px;text-align:right">${m}</th>`).join('');
 
-  const headerMeses=MC.map(m=>`<th style="min-width:75px">${m}</th>`).join('');
+  // Cada input tiene id="fc-{campo}-{mes}" y llama a recalcFlujo() al cambiar
   const makeRow=(f,color)=>`<tr>
     <td style="white-space:nowrap;font-size:11px;color:${color};padding-left:16px">${f.l}</td>
-    ${MC.map((m,i)=>`<td><input type="number" value="${FLUJO[f.k][i]||0}" step="1" onchange="FLUJO['${f.k}'][${i}]=+this.value" style="width:75px;padding:3px 5px;border:.5px solid var(--bd);border-radius:4px;font-size:11px;font-family:'Poppins',sans-serif;text-align:right;background:var(--bg2);color:var(--tx)"></td>`).join('')}
+    ${MC.map((m,i)=>`<td><input
+      id="fc-${f.k}-${i}"
+      type="number"
+      value="${FLUJO[f.k][i]||0}"
+      step="1"
+      oninput="FLUJO['${f.k}'][${i}]=+this.value;recalcFlujo()"
+      style="width:78px;padding:3px 5px;border:.5px solid var(--bd);border-radius:4px;font-size:11px;font-family:'Poppins',sans-serif;text-align:right;background:var(--bg2);color:var(--tx)"
+    ></td>`).join('')}
   </tr>`;
 
-  const totIngRow=`<tr style="background:var(--li2)"><td style="font-size:11px;font-weight:500;color:var(--gr)">= INGRESOS</td>${MC.map((_,i)=>`<td style="font-size:11px;font-weight:500;color:var(--gr)">${fmt(ingF(i))}</td>`).join('')}</tr>`;
-  const totGstRow=`<tr style="background:var(--re2)"><td style="font-size:11px;font-weight:500;color:var(--re)">= GASTOS</td>${MC.map((_,i)=>`<td style="font-size:11px;font-weight:500;color:var(--re)">−${fmt(gstF(i))}</td>`).join('')}</tr>`;
+  // Filas de totales con IDs para actualización live
+  const totIngRow=`<tr style="background:var(--li2)" id="frow-ing">
+    <td style="font-size:11px;font-weight:500;color:var(--gr)">= INGRESOS</td>
+    ${MC.map((_,i)=>`<td id="ft-ing-${i}" style="font-size:11px;font-weight:500;color:var(--gr);text-align:right;padding:6px 4px">${fmt(ingF(i))}</td>`).join('')}
+  </tr>`;
+  const totGstRow=`<tr style="background:var(--re2)" id="frow-gst">
+    <td style="font-size:11px;font-weight:500;color:var(--re)">= GASTOS</td>
+    ${MC.map((_,i)=>`<td id="ft-gst-${i}" style="font-size:11px;font-weight:500;color:var(--re);text-align:right;padding:6px 4px">−${fmt(gstF(i))}</td>`).join('')}
+  </tr>`;
+  const cfRow=`<tr style="background:var(--pu3)">
+    <td style="font-size:11px;font-weight:600;color:var(--pu)">CF MENSUAL</td>
+    ${MC.map((_,i)=>{const cf=ingF(i)-gstF(i);return`<td id="ft-cf-${i}" style="font-size:11px;font-weight:600;color:${cf>=0?'var(--gr)':'var(--re)'};text-align:right;padding:6px 4px">${fCF(cf)}</td>`;}).join('')}
+  </tr>`;
   let s3=SALDO0;
-  const cfRow=`<tr style="background:var(--pu3)"><td style="font-size:11px;font-weight:600;color:var(--pu)">CF MENSUAL</td>${MC.map((_,i)=>{const cf=ingF(i)-gstF(i);return`<td style="font-size:11px;font-weight:600;color:${cf>=0?'var(--gr)':'var(--re)'}">${fCF(cf)}</td>`;}).join('')}</tr>`;
-  const saldoRow=`<tr style="background:var(--pu3)"><td style="font-size:11px;font-weight:600;color:var(--pu)">SALDO</td>${MC.map((_,i)=>{s3+=ingF(i)-gstF(i);return`<td style="font-size:11px;font-weight:600;color:var(--pu)">${fmt(Math.round(s3))}</td>`;}).join('')}</tr>`;
+  const saldoRow=`<tr style="background:var(--pu3)">
+    <td style="font-size:11px;font-weight:600;color:var(--pu)">SALDO</td>
+    ${MC.map((_,i)=>{s3+=ingF(i)-gstF(i);return`<td id="ft-sal-${i}" style="font-size:11px;font-weight:600;color:var(--pu);text-align:right;padding:6px 4px">${fmt(Math.round(s3))}</td>`;}).join('')}
+  </tr>`;
 
   document.getElementById('flujo-view').innerHTML=`
   <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr><th style="min-width:120px">Concepto</th>${headerMeses}</tr></thead>
+    <thead><tr><th style="min-width:130px;text-align:left">Concepto</th>${headerMeses}</tr></thead>
     <tbody>
-      <tr><td colspan="${13}" style="background:var(--li2);padding:6px 12px;font-size:10px;font-weight:600;color:var(--gr);text-transform:uppercase;letter-spacing:.06em">INGRESOS</td></tr>
+      <tr><td colspan="13" style="background:var(--li2);padding:6px 12px;font-size:10px;font-weight:600;color:var(--gr);text-transform:uppercase;letter-spacing:.06em">INGRESOS</td></tr>
       ${ingRows.map(f=>makeRow(f,'var(--gr)')).join('')}
       ${totIngRow}
-      <tr><td colspan="${13}" style="background:var(--re2);padding:6px 12px;font-size:10px;font-weight:600;color:var(--re);text-transform:uppercase;letter-spacing:.06em">GASTOS</td></tr>
+      <tr><td colspan="13" style="background:var(--re2);padding:6px 12px;font-size:10px;font-weight:600;color:var(--re);text-transform:uppercase;letter-spacing:.06em">GASTOS</td></tr>
       ${gstRows.map(f=>makeRow(f,'var(--re)')).join('')}
       ${totGstRow}
-      <tr><td colspan="${13}" style="padding:4px"></td></tr>
+      <tr><td colspan="13" style="padding:4px"></td></tr>
       ${cfRow}${saldoRow}
     </tbody>
   </table></div>`;
+}
+
+// Recalcula totales en tiempo real sin rerenderizar toda la tabla
+function recalcFlujo(){
+  let saldo=SALDO0;
+  for(let i=0;i<12;i++){
+    const ing=ingF(i);
+    const gst=gstF(i);
+    const cf=ing-gst;
+    saldo+=cf;
+
+    const elIng=document.getElementById(`ft-ing-${i}`);
+    const elGst=document.getElementById(`ft-gst-${i}`);
+    const elCf=document.getElementById(`ft-cf-${i}`);
+    const elSal=document.getElementById(`ft-sal-${i}`);
+
+    if(elIng) elIng.textContent=fmt(ing);
+    if(elGst) elGst.textContent=`−${fmt(gst)}`;
+    if(elCf){
+      elCf.textContent=fCF(cf);
+      elCf.style.color=cf>=0?'var(--gr)':'var(--re)';
+    }
+    if(elSal) elSal.textContent=fmt(Math.round(saldo));
+  }
 }
 
 async function saveFlujo(){
