@@ -483,6 +483,7 @@ const BASE_FLUJO={
   web:      [414,2339,3827,700,700,700,700,0,700,0,700,700],
   consultoria:[0,0,0,0,450,450,450,0,450,0,450,450],
   personal: [4676,4676,4676,4876,4876,4876,4876,4876,4876,4876,4876,4876],
+  roberto:  [0,0,0,500,500,500,500,500,500,500,500,500], // Roberto Ámez captación IA
   estructura:[1660,1660,1660,1660,1660,1660,1510,1510,1510,1510,1510,1510],
   tecnologia:[219,98,300,193,193,193,193,193,193,193,487,277],
   prestamo: [474,474,474,474,474,474,474,474,474,474,474,474],
@@ -773,8 +774,11 @@ const estadoMes=i=>{
   return 'plan';
 };
 
-// Solo usar datos reales de movimientos si el mes está CERRADO
-const tR=i=>MESES_CERRADOS[i]&&MOVS.some(m=>mesI(mesM(m))===i);
+// Mostrar datos reales siempre que haya movimientos importados del mes
+// "cerrar mes" solo afecta al badge de estado y al color morado de la gráfica
+const tR=i=>MOVS.some(m=>mesI(mesM(m))===i);
+// La barra morada en la gráfica sí requiere mes cerrado (confirmado)
+const tRCerrado=i=>MESES_CERRADOS[i]&&MOVS.some(m=>mesI(mesM(m))===i);
 
 async function cerrarMes(i){
   MESES_CERRADOS[i]=true;
@@ -788,7 +792,7 @@ async function reabrirMes(i){
 }
 
 const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0);
-const gstF=i=>(FLUJO.personal[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
+const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
 const ingR=i=>MOVS.filter(m=>mesI(mesM(m))===i&&['retainer','ingreso_web','ingreso_otro'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
@@ -819,7 +823,7 @@ function renderD(){
   `;
   if(bC)bC.destroy();
   // Barra morada = mes cerrado (con datos reales si los hay, o plan confirmado si no)
-  const dataReal=MC.map((_,i)=>tR(i)?iM[i]:MESES_CERRADOS[i]?iM[i]:null);
+  const dataReal=MC.map((_,i)=>tRCerrado(i)?iM[i]:MESES_CERRADOS[i]?iM[i]:null);
   bC=new Chart(document.getElementById('cb'),{type:'bar',data:{labels:MC,datasets:[
     {label:'Real',data:dataReal,backgroundColor:'#7F77DD',borderRadius:3},
     {label:'Plan',data:MC.map((_,i)=>ingF(i)),backgroundColor:'rgba(135,178,41,0.3)',borderRadius:3}
@@ -862,7 +866,8 @@ function renderFlujo(){
     {k:'retainers',l:'Retainers',tipo:'ing'},
     {k:'web',l:'Web / puntual',tipo:'ing'},
     {k:'consultoria',l:'Consultoría',tipo:'ing'},
-    {k:'personal',l:'Personal',tipo:'gst'},
+    {k:'personal',l:'Personal (nóminas)',tipo:'gst'},
+    {k:'roberto',l:'Roberto Ámez (captación)',tipo:'gst'},
     {k:'estructura',l:'Estructura',tipo:'gst'},
     {k:'tecnologia',l:'Tecnología',tipo:'gst'},
     {k:'prestamo',l:'Préstamo ING',tipo:'gst'},
