@@ -795,8 +795,8 @@ const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0
 const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
-const ingR=i=>MOVS.filter(m=>mesI(mesM(m))===i&&['retainer','ingreso_web','ingreso_otro'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
-const gstR=i=>Math.abs(MOVS.filter(m=>mesI(mesM(m))===i&&!['retainer','ingreso_web','ingreso_otro','traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe<0).reduce((s,m)=>s+m.importe,0));
+const ingR=i=>MOVS.filter(m=>mesI(mesM(m))===i&&!['traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
+const gstR=i=>Math.abs(MOVS.filter(m=>mesI(mesM(m))===i&&!['traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe<0).reduce((s,m)=>s+m.importe,0));
 
 // ── DASHBOARD ─────────────────────────────────────────────────
 function renderD(){
