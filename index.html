@@ -210,6 +210,9 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
       <button class="slink" data-nav="irpf">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>IRPF 2026
       </button>
+      <button class="slink" data-nav="impuestos">
+        <svg viewBox="0 0 24 24"><path d="M9 14l6-6"/><circle cx="9.5" cy="9.5" r=".5" fill="currentColor"/><circle cx="14.5" cy="14.5" r=".5" fill="currentColor"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Trimestres fiscales
+      </button>
     </nav>
     <div class="sdiv"></div>
     <nav class="snav">
@@ -390,6 +393,20 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
         <div class="ph-actions"><button class="btn btn-li" onclick="saveIrpf()">Guardar cambios</button></div>
       </div>
       <div id="irpf-view"></div>
+    </div>
+
+    <!-- IMPUESTOS TRIMESTRALES -->
+    <div data-view="impuestos">
+      <div class="ph">
+        <div><div class="ph-title">Trimestres fiscales</div><div class="ph-sub">IVA (Mod.303) · IRPF (Mod.130) · Ingresos y gastos trimestrales</div></div>
+        <div class="ph-actions">
+          <select id="imp-anio" onchange="renderImpuestos()" class="fi" style="width:auto">
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+          </select>
+        </div>
+      </div>
+      <div id="imp-view"></div>
     </div>
 
     <!-- ANUAL -->
@@ -756,7 +773,7 @@ document.querySelectorAll('.slink').forEach(b=>b.addEventListener('click',()=>{
   b.classList.add('on');
   const v=b.dataset.nav;
   document.querySelector(`[data-view="${v}"]`).classList.add('on');
-  ({dashboard:renderD,flujo:renderFlujo,clientes:renderCli,movimientos:renderMovs,ads:renderAds,hacienda:renderHacienda,irpf:renderIrpf,anual:renderAn,config:loadCfg,importar:()=>{}})[v]?.();
+  ({dashboard:renderD,flujo:renderFlujo,clientes:renderCli,movimientos:renderMovs,ads:renderAds,hacienda:renderHacienda,irpf:renderIrpf,impuestos:renderImpuestos,anual:renderAn,config:loadCfg,importar:()=>{}})[v]?.();
 }));
 
 // ── HELPERS FLUJO ─────────────────────────────────────────────
@@ -1708,6 +1725,189 @@ async function saveCfg(){
   msg.textContent='Guardado. Recargando...';
   msg.style.color='var(--gr)';
   setTimeout(()=>location.reload(),800);
+}
+
+// ── DATOS FISCALES TRIMESTRALES ───────────────────────────────
+const FISCAL={
+  2026:{
+    1:{
+      label:'1T 2026 (Ene–Mar)',plazo303:'20 Abril 2026',plazo130:'20 Abril 2026',
+      ingresos:35922.48,gastos:26048.90,rto_neto:9873.58,
+      iva_devengado:9533.97,iva_deducible:2712.52,iva_pagar:6821.45,
+      irpf_base:9873.58,irpf_pct:20,irpf_pagar:1974.72,
+      pagado303:false,pagado130:false,
+      meses:{
+        ENE:{base_ing:11766.51,iva_dev:2470.97,iva_ded:676.95},
+        FEB:{base_ing:16583.75,iva_dev:3482.60,iva_ded:955.01},
+        MAR:{base_ing:17049.42,iva_dev:3580.40,iva_ded:1080.56},
+      }
+    },
+    2:{label:'2T 2026 (Abr–Jun)',plazo303:'20 Jul 2026',plazo130:'20 Jul 2026',pendiente:true},
+    3:{label:'3T 2026 (Jul–Sep)',plazo303:'20 Oct 2026',plazo130:'20 Oct 2026',pendiente:true},
+    4:{label:'4T 2026 (Oct–Dic)',plazo303:'30 Ene 2027',plazo130:'30 Ene 2027',pendiente:true},
+  },
+  2025:{
+    1:{
+      label:'1T 2025 (Ene–Mar)',plazo303:'20 Abr 2025',plazo130:'20 Abr 2025',
+      ingresos:16742.28,gastos:15650.33,rto_neto:1091.95,
+      iva_devengado:3173.53,iva_deducible:655.11,iva_pagar:2518.42,
+      irpf_base:1091.95,irpf_pct:20,irpf_pagar:218.39,
+      pagado303:true,pagado130:true,meses:null
+    },
+    2:{
+      label:'2T 2025 (Abr–Jun)',plazo303:'20 Jul 2025',plazo130:'20 Jul 2025',
+      ingresos:28106.22,gastos:18772.04,rto_neto:9333.18,
+      iva_devengado:6589.35,iva_deducible:1440.19,iva_pagar:5149.16,
+      irpf_base:9333.18,irpf_pct:20,irpf_pagar:1864.79,
+      pagado303:true,pagado130:true,
+      meses:{
+        ABR:{base_ing:11519.58,iva_dev:2419.11,iva_ded:429.35},
+        MAY:{base_ing:10840.99,iva_dev:2276.60,iva_ded:318.45},
+        JUN:{base_ing:9017.35,iva_dev:1893.64,iva_ded:692.39},
+      }
+    },
+    3:{
+      label:'3T 2025 (Jul–Sep)',plazo303:'20 Oct 2025',plazo130:'20 Oct 2025',
+      ingresos:21166.32,gastos:17191.34,rto_neto:3974.98,
+      iva_devengado:4773.51,iva_deducible:1044.04,iva_pagar:3729.47,
+      irpf_base:3974.98,irpf_pct:20,irpf_pagar:867.13,
+      pagado303:true,pagado130:true,meses:null
+    },
+    4:{
+      label:'4T 2025 (Oct–Dic) ★',plazo303:'30 Ene 2026',plazo130:'30 Ene 2026',
+      ingresos:25540.84,gastos:11458.65,rto_neto:14082.19,
+      iva_devengado:6637.39,iva_deducible:2330.41,iva_pagar:4306.98,
+      irpf_base:14082.19,irpf_pct:20,irpf_pagar:0,
+      pagado303:true,pagado130:true,
+      nota:'★ Mod.130 4T resultado negativo — no hubo pago fraccionado.',
+      meses:null
+    },
+  }
+
+};
+
+async function toggleFiscalPago(anio,t,modelo){
+  const q=FISCAL[anio][t];
+  if(modelo===303)q.pagado303=!q.pagado303;
+  else q.pagado130=!q.pagado130;
+  await fbSet('fiscal',`${anio}_${t}`,{pagado303:q.pagado303,pagado130:q.pagado130});
+  renderImpuestos();
+}
+
+function renderImpuestos(){
+  const anio=parseInt(document.getElementById('imp-anio')?.value||2026);
+  const data=FISCAL[anio];
+  if(!data){document.getElementById('imp-view').innerHTML='<div class="empty">Sin datos para este año.</div>';return}
+
+  // KPIs del año
+  const trimConDatos=Object.values(data).filter(t=>!t.pendiente);
+  const totalIvaPagar=trimConDatos.reduce((s,t)=>s+(t.iva_pagar||0),0);
+  const totalIrpfPagar=trimConDatos.reduce((s,t)=>s+(t.irpf_pagar||0),0);
+  const totalIngresos=trimConDatos.reduce((s,t)=>s+(t.ingresos||0),0);
+  const ivaPagado=trimConDatos.filter(t=>t.pagado303).reduce((s,t)=>s+(t.iva_pagar||0),0);
+  const irpfPagado=trimConDatos.filter(t=>t.pagado130).reduce((s,t)=>s+(t.irpf_pagar||0),0);
+
+  let html=`
+  <div class="kg3" style="margin-bottom:1.25rem">
+    <div class="kc re"><div class="kl">IVA a pagar ${anio} (conocido)</div><div class="kv">${fmtD(totalIvaPagar)}</div><div class="ks">${fmtD(ivaPagado)} pagado · ${fmtD(totalIvaPagar-ivaPagado)} pendiente</div></div>
+    <div class="kc am"><div class="kl">IRPF Mod.130 ${anio} (conocido)</div><div class="kv">${fmtD(totalIrpfPagar)}</div><div class="ks">${fmtD(irpfPagado)} pagado · ${fmtD(totalIrpfPagar-irpfPagado)} pendiente</div></div>
+    <div class="kc li"><div class="kl">Ingresos brutos declarados</div><div class="kv">${fmtD(totalIngresos)}</div><div class="ks">${trimConDatos.length} trimestre${trimConDatos.length!==1?'s':''} con datos</div></div>
+  </div>`;
+
+  // Tarjeta por trimestre
+  for(let t=1;t<=4;t++){
+    const q=data[t];
+    if(!q){continue;}
+    if(q.pendiente){
+      html+=`<div class="cc" style="margin-bottom:1rem;opacity:.55">
+        <div class="ct">${q.label} <span class="badge b-p">Sin datos · pendiente de subir</span></div>
+        <div style="font-size:12px;color:var(--tx2)">Sube los archivos del gestor para rellenar este trimestre.</div>
+      </div>`;
+      continue;
+    }
+
+    // Tarjeta completa
+    const iva_cf=q.iva_pagar||0;
+    const irpf_cf=q.irpf_pagar;
+    html+=`
+    <div class="cc" style="margin-bottom:1rem;border-left:3px solid var(--pu)">
+      <div class="ct">${q.label}
+        <div style="display:flex;gap:8px">
+          <span class="badge ${q.pagado303?'b-ok':'b-re'}">303: ${q.pagado303?'Pagado':'Pendiente'}</span>
+          <span class="badge ${q.pagado130?'b-ok':'b-re'}">130: ${q.pagado130?'Pagado':'Pendiente'}</span>
+        </div>
+      </div>
+
+      <!-- Resumen ingresos/gastos/rto -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem">
+        <div style="background:var(--li2);border-radius:var(--r8);padding:10px 12px">
+          <div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Ingresos declarados</div>
+          <div style="font-size:18px;font-weight:500;color:var(--gr)">${fmtD(q.ingresos)}</div>
+        </div>
+        <div style="background:var(--re2);border-radius:var(--r8);padding:10px 12px">
+          <div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Gastos deducibles</div>
+          <div style="font-size:18px;font-weight:500;color:var(--re)">−${fmtD(q.gastos)}</div>
+        </div>
+        <div style="background:var(--pu3);border-radius:var(--r8);padding:10px 12px">
+          <div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Rendimiento neto</div>
+          <div style="font-size:18px;font-weight:500;color:var(--pu)">${fmtD(q.rto_neto)}</div>
+        </div>
+      </div>
+
+      <!-- IVA y IRPF lado a lado -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">
+        <!-- MOD 303 IVA -->
+        <div style="border:.5px solid var(--bd);border-radius:var(--r8);padding:12px">
+          <div style="font-size:11px;font-weight:600;color:var(--pu);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Mod.303 — IVA</div>
+          ${q.sin303?'<div style="font-size:12px;color:var(--am);background:var(--am2);padding:8px 10px;border-radius:var(--r8)">⚠️ Borrador 303 pendiente de subir.</div>':`
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <tr><td style="color:var(--tx2);padding:2px 0">IVA devengado (cobrado a clientes)</td><td style="text-align:right;font-weight:500">${fmtD(q.iva_devengado)}</td></tr>
+            <tr><td style="color:var(--tx2);padding:2px 0">IVA deducible (soportado en compras)</td><td style="text-align:right;color:var(--gr)">−${fmtD(q.iva_deducible)}</td></tr>
+            <tr style="border-top:.5px solid var(--bd)"><td style="padding:4px 0;font-weight:600">A ingresar a Hacienda</td><td style="text-align:right;font-weight:700;color:var(--re);font-size:14px">${fmtD(iva_cf)}</td></tr>
+          </table>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Plazo: ${q.plazo303}</div>
+          <button onclick="toggleFiscalPago(${anio},${t},303)" class="btn ${q.pagado303?'btn-re':'btn-li'}" style="margin-top:8px;padding:4px 10px;font-size:11px">${q.pagado303?'Desmarcar pagado':'Marcar como pagado'}</button>
+          `}
+        </div>
+        <!-- MOD 130 IRPF -->
+        <div style="border:.5px solid var(--bd);border-radius:var(--r8);padding:12px">
+          <div style="font-size:11px;font-weight:600;color:var(--pu);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Mod.130 — IRPF</div>
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <tr><td style="color:var(--tx2);padding:2px 0">Ingresos computables</td><td style="text-align:right;font-weight:500">${fmtD(q.ingresos)}</td></tr>
+            <tr><td style="color:var(--tx2);padding:2px 0">Gastos fiscalmente deducibles</td><td style="text-align:right;color:var(--gr)">−${fmtD(q.gastos)}</td></tr>
+            <tr><td style="color:var(--tx2);padding:2px 0">Rendimiento neto × 20%</td><td style="text-align:right">${fmtD(q.rto_neto)} × 20%</td></tr>
+            <tr style="border-top:.5px solid var(--bd)"><td style="padding:4px 0;font-weight:600">A ingresar a Hacienda</td><td style="text-align:right;font-weight:700;color:var(--re);font-size:14px">${fmtD(irpf_cf)}</td></tr>
+          </table>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Plazo: ${q.plazo130}</div>
+          <button onclick="toggleFiscalPago(${anio},${t},130)" class="btn ${q.pagado130?'btn-re':'btn-li'}" style="margin-top:8px;padding:4px 10px;font-size:11px">${q.pagado130?'Desmarcar pagado':'Marcar como pagado'}</button>
+        </div>
+      </div>
+
+      <!-- Desglose por mes -->
+      ${q.meses?`
+      <div style="border-top:.5px solid var(--bd);padding-top:10px">
+        <div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Desglose mensual (IVA)</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:4px 8px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Mes</th>
+            <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Base imponible</th>
+            <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">IVA devengado</th>
+            <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">IVA deducible</th>
+            <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--tx2);border-bottom:.5px solid var(--bd)">Diferencia</th>
+          </tr></thead>
+          <tbody>${Object.entries(q.meses).map(([m,d])=>`<tr>
+            <td style="padding:4px 8px;font-weight:500">${m}</td>
+            <td style="padding:4px 8px;text-align:right">${fmtD(d.base_ing)}</td>
+            <td style="padding:4px 8px;text-align:right;color:var(--re)">${fmtD(d.iva_dev)}</td>
+            <td style="padding:4px 8px;text-align:right;color:var(--gr)">−${fmtD(d.iva_ded)}</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:500;color:var(--re)">${fmtD(d.iva_dev-d.iva_ded)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`:''} 
+    </div>`;
+  }
+
+  document.getElementById('imp-view').innerHTML=html;
 }
 
 // ── INIT ──────────────────────────────────────────────────────
