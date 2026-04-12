@@ -735,12 +735,25 @@ async function syncAll(){
   const hc=await fbGet('hacienda');
   HAC=hc&&hc.length?hc:JSON.parse(JSON.stringify(BASE_HAC));
   if(!hc||!hc.length){for(const h of BASE_HAC)await fbSet('hacienda',h.id,h)}
-  // Añadir aplazamientos 1T2026 si no están ya
+  // Cargar estado fiscal desde Firebase y aplicar aplazamientos si corresponde
+  const fiscSnap=await fbGet('fiscal');
+  if(fiscSnap&&fiscSnap.length){
+    fiscSnap.forEach(f=>{
+      const parts=(f._fbid||'').split('_');
+      if(parts.length>=2){const anio=parseInt(parts[0]),t=parseInt(parts[1]);if(FISCAL[anio]&&FISCAL[anio][t]){Object.assign(FISCAL[anio][t],f);}}
+    });
+  }
+  // Solo añadir APL_1T2026 a Hacienda si están marcados como aplazados
   const hacIds=new Set(HAC.map(h=>h.id));
-  for(const h of APL_1T2026){
-    if(!hacIds.has(h.id)){
-      HAC.push({...h});
-      await fbSet('hacienda',h.id,h);
+  const q1=FISCAL[2026]?.[1];
+  if(q1?.estado303==='aplazado'){
+    for(const h of APL_1T2026.filter(h=>h.tipo==='Aplazamiento IVA')){
+      if(!hacIds.has(h.id)){HAC.push({...h});await fbSet('hacienda',h.id,h);}
+    }
+  }
+  if(q1?.estado130==='aplazado'){
+    for(const h of APL_1T2026.filter(h=>h.tipo==='Aplazamiento IRPF')){
+      if(!hacIds.has(h.id)){HAC.push({...h});await fbSet('hacienda',h.id,h);}
     }
   }
   // IRPF
@@ -904,6 +917,9 @@ async function reabrirMes(i){
 }
 
 const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0);
+// Plan original — siempre desde BASE_FLUJO, nunca se modifica con datos reales
+const ingPlan=i=>(BASE_FLUJO.retainers[i]||0)+(BASE_FLUJO.web[i]||0)+(BASE_FLUJO.consultoria[i]||0);
+const gstPlan=i=>(BASE_FLUJO.personal[i]||0)+(BASE_FLUJO.roberto[i]||0)+(BASE_FLUJO.estructura[i]||0)+(BASE_FLUJO.tecnologia[i]||0)+(BASE_FLUJO.prestamo[i]||0)+(BASE_FLUJO.hacienda[i]||0)+(BASE_FLUJO.social_ads[i]||0);
 const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||BASE_FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
@@ -943,7 +959,7 @@ function renderD(){
   const dataReal=MC.map((_,i)=>tRCerrado(i)?iM[i]:MESES_CERRADOS[i]?iM[i]:null);
   bC=new Chart(document.getElementById('cb'),{type:'bar',data:{labels:MC,datasets:[
     {label:'Real',data:dataReal,backgroundColor:'#7F77DD',borderRadius:3},
-    {label:'Plan',data:MC.map((_,i)=>ingF(i)),backgroundColor:'rgba(135,178,41,0.3)',borderRadius:3}
+    {label:'Plan',data:MC.map((_,i)=>ingPlan(i)),backgroundColor:'rgba(135,178,41,0.3)',borderRadius:3}
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:false,font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
   if(lC)lC.destroy();
   lC=new Chart(document.getElementById('cl'),{type:'line',data:{labels:['Ini',...MC],datasets:[{data:sEv,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.06)',borderWidth:2,pointRadius:2.5,fill:true,tension:0.35}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},callback:v=>(v/1000).toFixed(0)+'k€'},grid:{color:'rgba(128,128,128,0.07)'}}}}});
@@ -957,7 +973,7 @@ function renderD(){
   };
   document.getElementById('tbl-d').innerHTML=`<table><thead><tr><th>Mes</th><th>Estado</th><th>Ingresos</th><th>Gastos</th><th>CF</th><th>vs Plan</th><th>Saldo</th><th></th></tr></thead><tbody>${MC.map((m,i)=>{
     const r=tR(i),ing=iM[i],gst=gM[i],cf=ing-gst;s2+=cf;
-    const vp=r?ing-ingF(i):null;
+    const vp=r?ing-ingPlan(i):null;
     const e=estadoMes(i);
     const puedesCerrar=e==='en_curso'||e==='pasado_sin_cerrar';
     const btnCerrar=puedesCerrar?`<button onclick="cerrarMes(${i})" class="btn btn-li" style="padding:2px 8px;font-size:10px;white-space:nowrap">Cerrar mes</button>`:
@@ -1784,7 +1800,7 @@ async function saveIrpf(){
 function renderAn(){
   if(!FLUJO)return;
   let saldo=SALDO0,tI=0,tG=0;
-  const rows=MC.map((m,i)=>{const r=tR(i),ing=r?ingR(i):ingF(i),gst=r?gstR(i):gstF(i),cf=ing-gst;saldo+=cf;tI+=ing;tG+=gst;const vp=r?ing-ingF(i):null;return`<tr><td><strong>${m}</strong></td><td><span class="badge ${r?'b-r':'b-p'}">${r?'Real':'Plan'}</span></td><td>${fmt(ing)}</td><td>${fmt(gst)}</td><td class="${cf>=0?'pos':'neg'}">${fCF(cf)}</td><td>${vp!=null?`<span class="${vp>=0?'pos':'neg'}">${fCF(vp)}</span>`:'—'}</td><td>${fmt(Math.round(saldo))}</td></tr>`;}).join('');
+  const rows=MC.map((m,i)=>{const r=tR(i),ing=r?ingR(i):ingF(i),gst=r?gstR(i):gstF(i),cf=ing-gst;saldo+=cf;tI+=ing;tG+=gst;const vp=r?ing-ingPlan(i):null;return`<tr><td><strong>${m}</strong></td><td><span class="badge ${r?'b-r':'b-p'}">${r?'Real':'Plan'}</span></td><td>${fmt(ing)}</td><td>${fmt(gst)}</td><td class="${cf>=0?'pos':'neg'}">${fCF(cf)}</td><td>${vp!=null?`<span class="${vp>=0?'pos':'neg'}">${fCF(vp)}</span>`:'—'}</td><td>${fmt(Math.round(saldo))}</td></tr>`;}).join('');
   const pct=Math.min(100,Math.round(tI/OBJ*100));
   document.getElementById('an-v').innerHTML=`<div class="kg3"><div class="kc"><div class="kl">Facturación total</div><div class="kv">${fmt(tI)}</div><div class="pb"><div class="pf" style="width:${pct}%"></div></div><div class="ks">${fP(pct)} del objetivo</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv">${fmt(tG)}</div></div><div class="kc ${(tI-tG)>=0?'gr':'re'}"><div class="kl">Resultado neto</div><div class="kv ${(tI-tG)>=0?'pos':'neg'}">${fCF(tI-tG)}</div><div class="ks">Saldo final: ${fmt(saldo)}</div></div></div><div class="tbl-wrap"><table><thead><tr><th>Mes</th><th></th><th>Ingresos</th><th>Gastos</th><th>CF</th><th>vs Plan</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -1978,6 +1994,7 @@ const FISCAL={
       iva_devengado:9533.97,iva_deducible:2712.52,iva_pagar:6821.45,
       irpf_base:9873.58,irpf_pct:20,irpf_pagar:1974.72,
       pagado303:false,pagado130:false,
+      estado303:'pendiente',estado130:'pendiente', // pendiente | pagado | aplazado
       meses:{
         ENE:{base_ing:11766.51,iva_dev:2470.97,iva_ded:676.95},
         FEB:{base_ing:16583.75,iva_dev:3482.60,iva_ded:955.01},
@@ -2043,12 +2060,50 @@ const ingFacturado=i=>{
   return FACTURADO[key]??null;
 };
 
-async function toggleFiscalPago(anio,t,modelo){
+// Registrar estado fiscal: 'pagado' o 'aplazado'
+async function registrarFiscal(anio,t,modelo,accion){
   const q=FISCAL[anio][t];
-  if(modelo===303)q.pagado303=!q.pagado303;
-  else q.pagado130=!q.pagado130;
-  await fbSet('fiscal',`${anio}_${t}`,{pagado303:q.pagado303,pagado130:q.pagado130});
+  if(!q)return;
+  const campoEstado=modelo===303?'estado303':'estado130';
+  const campoPagado=modelo===303?'pagado303':'pagado130';
+  const apl=APL_1T2026.filter(h=>h.tipo===(modelo===303?'Aplazamiento IVA':'Aplazamiento IRPF'));
+
+  if(accion==='pagado'){
+    q[campoEstado]='pagado';
+    q[campoPagado]=true;
+    // Eliminar entradas de aplazamiento de Hacienda si existen
+    const ids=new Set(apl.map(h=>h.id));
+    for(const id of ids){
+      HAC=HAC.filter(h=>h.id!==id);
+      await fbDel('hacienda',id);
+    }
+  }else if(accion==='aplazado'){
+    q[campoEstado]='aplazado';
+    q[campoPagado]=false;
+    // Añadir cuotas a Hacienda si no están ya
+    const hacIds=new Set(HAC.map(h=>h.id));
+    for(const h of apl){
+      if(!hacIds.has(h.id)){
+        HAC.push({...h});
+        await fbSet('hacienda',h.id,h);
+      }
+    }
+    // Reordenar HAC
+    HAC.sort((a,b)=>{const ay=a.anio||2026,by=b.anio||2026;if(ay!==by)return ay-by;return MC.indexOf(a.mes)-MC.indexOf(b.mes);});
+  }else if(accion==='pendiente'){
+    q[campoEstado]='pendiente';
+    q[campoPagado]=false;
+    // Eliminar aplazamientos de Hacienda
+    const ids=new Set(apl.map(h=>h.id));
+    for(const id of ids){HAC=HAC.filter(h=>h.id!==id);await fbDel('hacienda',id);}
+  }
+
+  await fbSet('fiscal',`${anio}_${t}`,{
+    pagado303:q.pagado303,pagado130:q.pagado130,
+    estado303:q.estado303,estado130:q.estado130
+  });
   renderImpuestos();
+  renderHacienda();
 }
 
 function renderImpuestos(){
@@ -2123,7 +2178,18 @@ function renderImpuestos(){
             <tr style="border-top:.5px solid var(--bd)"><td style="padding:4px 0;font-weight:600">A ingresar a Hacienda</td><td style="text-align:right;font-weight:700;color:var(--re);font-size:14px">${fmtD(iva_cf)}</td></tr>
           </table>
           <div style="font-size:10px;color:var(--tx2);margin-top:6px">Plazo: ${q.plazo303}</div>
-          <button onclick="toggleFiscalPago(${anio},${t},303)" class="btn ${q.pagado303?'btn-re':'btn-li'}" style="margin-top:8px;padding:4px 10px;font-size:11px">${q.pagado303?'Desmarcar pagado':'Marcar como pagado'}</button>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            ${(q.estado303||'pendiente')==='pendiente'?`
+              <button onclick="registrarFiscal(${anio},${t},303,'pagado')" class="btn btn-li" style="padding:4px 10px;font-size:11px">✅ Marcar como pagado</button>
+              <button onclick="registrarFiscal(${anio},${t},303,'aplazado')" class="btn btn-p" style="padding:4px 10px;font-size:11px">📅 Aplazar (12 meses)</button>
+            `:(q.estado303==='pagado')?`
+              <span class="badge b-ok" style="padding:4px 10px;font-size:11px">✅ Pagado directamente</span>
+              <button onclick="registrarFiscal(${anio},${t},303,'pendiente')" class="btn" style="padding:4px 10px;font-size:11px">Deshacer</button>
+            `:`
+              <span class="badge b-info" style="padding:4px 10px;font-size:11px">📅 Aplazado · cuotas en Hacienda</span>
+              <button onclick="registrarFiscal(${anio},${t},303,'pendiente')" class="btn" style="padding:4px 10px;font-size:11px">Cancelar aplazamiento</button>
+            `}
+          </div>
           `}
         </div>
         <!-- MOD 130 IRPF -->
@@ -2136,7 +2202,18 @@ function renderImpuestos(){
             <tr style="border-top:.5px solid var(--bd)"><td style="padding:4px 0;font-weight:600">A ingresar a Hacienda</td><td style="text-align:right;font-weight:700;color:var(--re);font-size:14px">${fmtD(irpf_cf)}</td></tr>
           </table>
           <div style="font-size:10px;color:var(--tx2);margin-top:6px">Plazo: ${q.plazo130}</div>
-          <button onclick="toggleFiscalPago(${anio},${t},130)" class="btn ${q.pagado130?'btn-re':'btn-li'}" style="margin-top:8px;padding:4px 10px;font-size:11px">${q.pagado130?'Desmarcar pagado':'Marcar como pagado'}</button>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            ${(q.estado130||'pendiente')==='pendiente'?`
+              <button onclick="registrarFiscal(${anio},${t},130,'pagado')" class="btn btn-li" style="padding:4px 10px;font-size:11px">✅ Marcar como pagado</button>
+              <button onclick="registrarFiscal(${anio},${t},130,'aplazado')" class="btn btn-p" style="padding:4px 10px;font-size:11px">📅 Aplazar (12 meses)</button>
+            `:(q.estado130==='pagado')?`
+              <span class="badge b-ok" style="padding:4px 10px;font-size:11px">✅ Pagado directamente</span>
+              <button onclick="registrarFiscal(${anio},${t},130,'pendiente')" class="btn" style="padding:4px 10px;font-size:11px">Deshacer</button>
+            `:`
+              <span class="badge b-info" style="padding:4px 10px;font-size:11px">📅 Aplazado · cuotas en Hacienda</span>
+              <button onclick="registrarFiscal(${anio},${t},130,'pendiente')" class="btn" style="padding:4px 10px;font-size:11px">Cancelar aplazamiento</button>
+            `}
+          </div>
         </div>
       </div>
 
