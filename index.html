@@ -270,7 +270,22 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
 
     <!-- IMPORTAR -->
     <div data-view="importar">
-      <div class="ph"><div><div class="ph-title">Importar extracto bancario</div><div class="ph-sub">XLS de ING · etiquetado automático</div></div></div>
+      <div class="ph"><div><div class="ph-title">Importar datos</div><div class="ph-sub">Extracto bancario ING · Listado de facturas del gestor</div></div></div>
+
+      <!-- Facturas del gestor -->
+      <div class="cc" style="border-left:3px solid var(--li);margin-bottom:1.25rem">
+        <div class="ct">📋 Listado de facturas mensual (gestor)</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Sube el Excel que descarga tu gestor cada mes. El dashboard extrae la base imponible facturada y actualiza las gráficas automáticamente.</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-li" onclick="document.getElementById('fras-input').click()">📂 Subir listado de facturas</button>
+          <span style="font-size:11px;color:var(--tx2)">Formatos: .xlsx · .xls · compatible con el listado de tu gestoría</span>
+        </div>
+        <input type="file" id="fras-input" accept=".xls,.xlsx" style="display:none" onchange="importarFacturas(this.files[0])">
+        <div id="fras-res" style="margin-top:.75rem"></div>
+      </div>
+
+      <!-- Extracto bancario -->
+      <div class="ct" style="margin-bottom:.5rem">🏦 Extracto bancario ING</div>
       <div class="upzone" id="upzone" onclick="document.getElementById('file-input').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="hdDrop(event)">
         <div style="font-size:36px;margin-bottom:.75rem">📂</div>
         <div style="font-size:14px;font-weight:500;margin-bottom:.25rem">Arrastra el XLS aquí o haz clic</div>
@@ -677,6 +692,12 @@ async function syncAll(){
   else ADS=gLS('lmnhl_ads')||[];
   // Reglas aprendidas
   await cargarReglasAprendidas();
+  // Facturación mensual guardada
+  const facSnap=await fbGet('facturado');
+  if(facSnap&&facSnap.length&&facSnap[0].data){
+    const saved=JSON.parse(facSnap[0].data);
+    Object.assign(FACTURADO,saved);
+  }
   const mc2=await fbGet('config');
   if(mc2&&mc2.length){
     const entry=mc2.find(x=>x._fbid==='meses_cerrados'||x.id==='meses_cerrados');
@@ -791,9 +812,8 @@ const estadoMes=i=>{
   return 'plan';
 };
 
-// Mostrar datos reales siempre que haya movimientos importados del mes
-// "cerrar mes" solo afecta al badge de estado y al color morado de la gráfica
-const tR=i=>MOVS.some(m=>mesI(mesM(m))===i);
+// Un mes tiene datos reales si tiene base imponible facturada O movimientos bancarios
+const tR=i=>ingFacturado(i)!==null||MOVS.some(m=>mesI(mesM(m))===i);
 // La barra morada en la gráfica sí requiere mes cerrado (confirmado)
 const tRCerrado=i=>MESES_CERRADOS[i]&&MOVS.some(m=>mesI(mesM(m))===i);
 
@@ -812,7 +832,12 @@ const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0
 const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
-const ingR=i=>MOVS.filter(m=>mesI(mesM(m))===i&&!['traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
+// Ingresos reales: usa base imponible facturada si disponible, si no cobros bancarios
+const ingR=i=>{
+  const fac=ingFacturado(i);
+  if(fac!==null)return fac;
+  return MOVS.filter(m=>mesI(mesM(m))===i&&!['traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe>0).reduce((s,m)=>s+m.importe,0);
+};
 const gstR=i=>Math.abs(MOVS.filter(m=>mesI(mesM(m))===i&&!['traspaso','ignorar'].includes(m.categoria_lmnhl)&&m.importe<0).reduce((s,m)=>s+m.importe,0));
 
 // ── DASHBOARD ─────────────────────────────────────────────────
@@ -1280,6 +1305,94 @@ async function addAdsEntry(){
 async function delAds(i){
   if(ADS[i]._fbid)await fbDel('ads',ADS[i]._fbid);
   ADS.splice(i,1);sLS('lmnhl_ads',ADS);renderAds();
+}
+
+// ── IMPORTAR FACTURAS GESTOR ─────────────────────────────────
+async function importarFacturas(file){
+  if(!file)return;
+  const res=document.getElementById('fras-res');
+  res.innerHTML='<div class="al al-i">Leyendo archivo...</div>';
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true,raw:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+
+    // Detectar totales — buscar fila con "totales" o sumar columna base imponible
+    let totalBase=0,totalCuota=0,mes=null,anio=null;
+    let colBase=-1,colCuota=-1,colFecha=-1;
+
+    // Buscar cabecera
+    let hdrRow=-1;
+    for(let i=0;i<Math.min(rows.length,10);i++){
+      const r=rows[i].map(v=>String(v||'').toLowerCase());
+      if(r.some(v=>v.includes('base imponible')||v.includes('base'))){
+        hdrRow=i;
+        colBase=r.findIndex(v=>v.includes('base imponible')||v==='base');
+        colCuota=r.findIndex(v=>v.includes('cuota'));
+        colFecha=r.findIndex(v=>v.includes('fecha'));
+        break;
+      }
+    }
+
+    if(hdrRow===-1){res.innerHTML='<div class="al al-w">No se reconoció el formato. ¿Es el listado de facturas de tu gestoría?</div>';return}
+
+    // Sumar base imponible de todas las filas de datos (ignorar totales y vacíos)
+    const fechas=[];
+    for(let i=hdrRow+1;i<rows.length;i++){
+      const row=rows[i];
+      const base=typeof row[colBase]==='number'?row[colBase]:parseFloat(String(row[colBase]||'').replace(',','.'));
+      const cuota=typeof row[colCuota]==='number'?row[colCuota]:parseFloat(String(row[colCuota]||'').replace(',','.'));
+      if(!isNaN(base)&&base>0&&base<200000){
+        totalBase+=base;
+        if(!isNaN(cuota))totalCuota+=cuota;
+        if(colFecha>=0&&row[colFecha]){
+          const fd=row[colFecha] instanceof Date?row[colFecha]:new Date(row[colFecha]);
+          if(!isNaN(fd.getTime()))fechas.push(fd);
+        }
+      }
+    }
+
+    if(totalBase===0){res.innerHTML='<div class="al al-w">No se encontraron importes en la columna de base imponible.</div>';return}
+
+    // Determinar mes y año del archivo
+    if(fechas.length>0){
+      // Usar la fecha más frecuente
+      const meses={};
+      fechas.forEach(f=>{const k=`${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}`;meses[k]=(meses[k]||0)+1;});
+      const mesKey=Object.entries(meses).sort((a,b)=>b[1]-a[1])[0][0];
+      mes=parseInt(mesKey.split('-')[1]);anio=parseInt(mesKey.split('-')[0]);
+    }
+
+    // Si no detectamos fecha, preguntar
+    if(!mes||!anio){
+      res.innerHTML=`<div class="al al-w">
+        No se detectó el mes automáticamente. Selecciónalo:
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          ${MC.map((m,i)=>`<button onclick="guardarFacturado(${i+1},2026,${totalBase.toFixed(2)})" class="btn" style="padding:4px 10px;font-size:11px">${m} 2026</button>`).join('')}
+        </div>
+        <div style="margin-top:.5rem;font-size:12px;color:var(--tx2)">Base imponible detectada: <strong>${fmtD(totalBase)}</strong></div>
+      </div>`;
+      return;
+    }
+
+    // Guardar y confirmar
+    await guardarFacturado(mes,anio,totalBase);
+    res.innerHTML=`<div class="al al-ok">✓ Base imponible de ${MC[mes-1]} ${anio} actualizada: <strong>${fmtD(totalBase)}</strong> · IVA devengado: ${fmtD(totalCuota)}</div>`;
+
+  }catch(e){
+    res.innerHTML=`<div class="al al-w">Error al leer el archivo: ${e.message}</div>`;
+    console.error(e);
+  }
+}
+
+async function guardarFacturado(mes,anio,base){
+  const key=`${anio}-${String(mes).padStart(2,'0')}`;
+  FACTURADO[key]=base;
+  // Guardar en Firebase
+  await fbSet('facturado','datos',{data:JSON.stringify(FACTURADO),updated:new Date().toISOString()});
+  document.getElementById('fras-res').innerHTML=`<div class="al al-ok">✓ ${MC[mes-1]} ${anio}: <strong>${fmtD(base)}</strong> guardado. La gráfica se ha actualizado.</div>`;
+  renderD();
 }
 
 // ── EXTRACCIÓN IA CARTA HACIENDA ─────────────────────────────
@@ -1784,6 +1897,21 @@ const FISCAL={
     },
   }
 
+};
+
+// Base imponible facturada por mes (sin IVA) — fuente: Mod.303 y listados de facturas
+// Usar esto en dashboard y gráficas en lugar de cobros bancarios
+const FACTURADO={
+  // 2025
+  '2025-04':11519.58,'2025-05':10840.99,'2025-06':9017.35,
+  // 2026
+  '2026-01':11766.51,'2026-02':16583.75,'2026-03':17049.42,
+};
+
+// Devuelve base imponible facturada si existe, si no null
+const ingFacturado=i=>{
+  const key=`2026-${String(i+1).padStart(2,'0')}`;
+  return FACTURADO[key]??null;
 };
 
 async function toggleFiscalPago(anio,t,modelo){
