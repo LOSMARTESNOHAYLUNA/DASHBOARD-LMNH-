@@ -537,7 +537,7 @@ const ALLOWED_UID='Zhs1o7sxAWMOkiCsYinSogzdsqd2';
 // Datos base del plan financiero (editables desde el dashboard)
 const BASE_FLUJO={
   retainers:[9470,9470,10385,10621,10621,10621,10621,10621,10621,10621,10621,10621],
-  web:      [414,2339,3827,700,700,700,700,0,700,0,700,700],
+  web:      [414,2339,3267.90,700,700,700,700,0,700,0,700,700], // MAR ajustado a facturación real 13.305,90€
   consultoria:[0,0,0,0,450,450,450,0,450,0,450,450],
   personal: [4676,4676,4676,4876,4876,4876,4876,4876,4876,4876,4876,4876],
   roberto:  [0,0,0,500,500,500,500,500,500,500,500,500], // Roberto Ámez captación IA
@@ -628,7 +628,7 @@ const cI=c=>CATS.find(x=>x.v===c)||{l:c,c:'tr-d'};
 const CATS=[
   {v:'retainer',l:'Retainer',c:'tr-r'},{v:'ingreso_web',l:'Web/puntual',c:'tr-i'},{v:'ingreso_otro',l:'Otro ingreso',c:'tr-i'},
   {v:'app',l:'App/Software',c:'tr-a'},{v:'personal',l:'Personal',c:'tr-p'},{v:'estructura',l:'Estructura',c:'tr-e'},
-  {v:'hacienda',l:'Hacienda',c:'tr-h'},{v:'prestamo',l:'Préstamo ING',c:'tr-h'},
+  {v:'hacienda',l:'Hacienda',c:'tr-h'},{v:'prestamo',l:'Préstamo CaixaBank',c:'tr-h'},
   {v:'Meta Ads',l:'Meta Ads',c:'tr-p'},{v:'Google Ads',l:'Google Ads',c:'tr-p'},{v:'Setroi (prensa)',l:'Setroi',c:'tr-e'},
   {v:'ads',l:'Publicidad',c:'tr-p'},{v:'traspaso',l:'Traspaso',c:'tr-t'},{v:'otro_gasto',l:'Otro gasto',c:'tr-o'},{v:'ignorar',l:'Ignorar',c:'tr-t'},
 ];
@@ -973,7 +973,7 @@ function renderFlujo(){
     {k:'roberto',l:'Roberto Ámez (captación)',tipo:'gst'},
     {k:'estructura',l:'Estructura',tipo:'gst'},
     {k:'tecnologia',l:'Tecnología',tipo:'gst'},
-    {k:'prestamo',l:'Préstamo ING',tipo:'gst'},
+    {k:'prestamo',l:'Préstamo CaixaBank',tipo:'gst'},
     {k:'hacienda',l:'Hacienda',tipo:'gst'},
     {k:'social_ads',l:'Ads propias',tipo:'gst'},
   ];
@@ -1482,9 +1482,25 @@ async function guardarFacturado(mes,anio,base){
   FACTURADO[key]=base;
   // Guardar en Firebase
   await fbSet('facturado','datos',{data:JSON.stringify(FACTURADO),updated:new Date().toISOString()});
+
+  // Actualizar flujo de caja si es 2026
+  if(anio===2026){
+    const i=mes-1; // índice 0-based
+    if(FLUJO&&FLUJO.retainers){
+      const retainers=FLUJO.retainers[i]||0;
+      // Ajustar web/puntual para que retainers + web = base real facturada
+      const webReal=Math.max(0,Math.round((base-retainers)*100)/100);
+      if(!FLUJO.web)FLUJO.web=[...BASE_FLUJO.web];
+      FLUJO.web[i]=webReal;
+      // Guardar flujo actualizado en Firebase
+      await fbSet('flujo','plan2026',{data:JSON.stringify(FLUJO),updated:new Date().toISOString()});
+    }
+  }
+
   const resEl=document.getElementById('fras-res2')||document.getElementById('fras-res');
-  if(resEl)resEl.innerHTML=`<div class="al al-ok">✓ ${MC[mes-1]} ${anio}: <strong>${fmtD(base)}</strong> guardado.</div>`;
+  if(resEl)resEl.innerHTML=`<div class="al al-ok">✓ ${MC[mes-1]} ${anio}: <strong>${fmtD(base)}</strong> guardado · flujo de caja actualizado automáticamente.</div>`;
   renderD();
+  if(document.querySelector('[data-view="flujo"]')?.classList.contains('on'))renderFlujo();
   if(document.querySelector('[data-nav="facturas"]')?.classList.contains('on'))renderFacturas();
 }
 
@@ -2004,7 +2020,7 @@ const FACTURADO={
   // 2025
   '2025-04':11519.58,'2025-05':10840.99,'2025-06':9017.35,
   // 2026
-  '2026-01':11766.51,'2026-02':16583.75,'2026-03':17049.42,
+  '2026-01':11766.51,'2026-02':16583.75,'2026-03':13305.90,
 };
 
 // Devuelve base imponible facturada si existe, si no null
