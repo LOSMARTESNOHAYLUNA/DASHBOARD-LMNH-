@@ -829,7 +829,7 @@ async function reabrirMes(i){
 }
 
 const ingF=i=>(FLUJO.retainers[i]||0)+(FLUJO.web[i]||0)+(FLUJO.consultoria[i]||0);
-const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
+const gstF=i=>(FLUJO.personal[i]||0)+((FLUJO.roberto||BASE_FLUJO.roberto||[])[i]||0)+(FLUJO.estructura[i]||0)+(FLUJO.tecnologia[i]||0)+(FLUJO.prestamo[i]||0)+(FLUJO.hacienda[i]||0)+(FLUJO.social_ads[i]||0);
 const mesM=m=>MC[new Date(m.fecha).getMonth()];
 const mesI=m=>MC.indexOf(m);
 // Ingresos reales: usa base imponible facturada si disponible, si no cobros bancarios
@@ -926,9 +926,9 @@ function renderFlujo(){
     ${MC.map((m,i)=>`<td><input
       id="fc-${f.k}-${i}"
       type="number"
-      value="${FLUJO[f.k][i]||0}"
+      value="${(FLUJO[f.k]||BASE_FLUJO[f.k]||[])[i]||0}"
       step="1"
-      oninput="FLUJO['${f.k}'][${i}]=+this.value;recalcFlujo()"
+      oninput="if(!FLUJO['${f.k}'])FLUJO['${f.k}']=[0,0,0,0,0,0,0,0,0,0,0,0];FLUJO['${f.k}'][${i}]=+this.value;recalcFlujo()"
       style="width:78px;padding:3px 5px;border:.5px solid var(--bd);border-radius:4px;font-size:11px;font-family:'Poppins',sans-serif;text-align:right;background:var(--bg2);color:var(--tx)"
     ></td>`).join('')}
   </tr>`;
