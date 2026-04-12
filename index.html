@@ -194,6 +194,9 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
       <button class="slink" data-nav="importar">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Importar banco
       </button>
+      <button class="slink" data-nav="facturas">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Facturas mensuales
+      </button>
       <button class="slink" data-nav="movimientos">
         <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>Movimientos
       </button>
@@ -293,6 +296,28 @@ pre{white-space:pre-wrap;word-break:break-all;font-family:monospace}
       </div>
       <input type="file" id="file-input" accept=".xls,.xlsx" onchange="hdFile(this.files[0])">
       <div id="imp-res"></div>
+    </div>
+
+    <!-- FACTURAS MENSUALES -->
+    <div data-view="facturas">
+      <div class="ph">
+        <div><div class="ph-title">Facturas mensuales</div><div class="ph-sub">Base imponible por mes · fuente: listado del gestor</div></div>
+        <div class="ph-actions"><button class="btn btn-li" onclick="document.getElementById('fras-input2').click()">📂 Subir listado de facturas</button></div>
+      </div>
+      <input type="file" id="fras-input2" accept=".xls,.xlsx" style="display:none" onchange="importarFacturas(this.files[0],'facturas')">
+      <div id="fras-res2"></div>
+      <div id="facturas-estado"></div>
+    </div>
+
+    <!-- FACTURAS MENSUALES -->
+    <div data-view="facturas">
+      <div class="ph">
+        <div><div class="ph-title">Facturas mensuales</div><div class="ph-sub">Base imponible facturada por mes · fuente: listado del gestor</div></div>
+        <div class="ph-actions"><button class="btn btn-li" onclick="document.getElementById('fras-input2').click()">📂 Subir listado</button></div>
+      </div>
+      <input type="file" id="fras-input2" accept=".xls,.xlsx" style="display:none" onchange="importarFacturas(this.files[0],'facturas2')">
+      <div id="fras-res2" style="margin-bottom:1rem"></div>
+      <div id="facturas-estado"></div>
     </div>
 
     <!-- MOVIMIENTOS -->
@@ -794,7 +819,7 @@ document.querySelectorAll('.slink').forEach(b=>b.addEventListener('click',()=>{
   b.classList.add('on');
   const v=b.dataset.nav;
   document.querySelector(`[data-view="${v}"]`).classList.add('on');
-  ({dashboard:renderD,flujo:renderFlujo,clientes:renderCli,movimientos:renderMovs,ads:renderAds,hacienda:renderHacienda,irpf:renderIrpf,impuestos:renderImpuestos,anual:renderAn,config:loadCfg,importar:()=>{}})[v]?.();
+  ({dashboard:renderD,flujo:renderFlujo,clientes:renderCli,facturas:renderFacturas,movimientos:renderMovs,ads:renderAds,hacienda:renderHacienda,irpf:renderIrpf,impuestos:renderImpuestos,anual:renderAn,config:loadCfg,importar:()=>{}})[v]?.();
 }));
 
 // ── HELPERS FLUJO ─────────────────────────────────────────────
@@ -1386,13 +1411,45 @@ async function importarFacturas(file){
   }
 }
 
+function renderFacturas(){
+  const el=document.getElementById('facturas-estado');
+  if(!el)return;
+  const anio=2026;
+  const meses=MC.map((m,i)=>{
+    const key=`${anio}-${String(i+1).padStart(2,'0')}`;
+    const val=FACTURADO[key];
+    const hoy=new Date();
+    const esPasado=i<hoy.getMonth()||(i===hoy.getMonth());
+    return{m,i,key,val,esPasado};
+  });
+  el.innerHTML=`
+    <div class="al al-i" style="margin-bottom:1rem">Sube el Excel de facturas de cada mes para que el dashboard use la base imponible real en lugar del plan proyectado.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+    ${meses.map(({m,i,key,val,esPasado})=>`
+      <div style="background:var(--bg2);border:.5px solid var(--bd);border-radius:var(--r12);padding:14px;border-top:3px solid ${val?'var(--gr)':esPasado?'var(--re)':'var(--bd)'}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:500">${m} ${anio}</div>
+          <span class="badge ${val?'b-ok':esPasado?'b-re':'b-p'}">${val?'✓ Subido':esPasado?'Pendiente':'Futuro'}</span>
+        </div>
+        ${val?`<div style="font-size:18px;font-weight:500;color:var(--gr)">${fmtD(val)}</div><div style="font-size:10px;color:var(--tx2);margin-top:2px">base imponible</div>`:`<div style="font-size:12px;color:var(--tx2)">${esPasado?'Sin datos — sube el listado del gestor':'—'}</div>`}
+        ${esPasado&&!val?`<button onclick="document.getElementById('fras-mes-target').value='${key}';document.getElementById('fras-input2').click()" class="btn" style="margin-top:8px;padding:3px 10px;font-size:11px;width:100%">Subir ${m}</button>`:''}
+        ${val?`<button onclick="document.getElementById('fras-mes-target').value='${key}';document.getElementById('fras-input2').click()" class="btn" style="margin-top:8px;padding:3px 10px;font-size:11px;width:100%;color:var(--tx2)">Actualizar</button>`:''}
+      </div>
+    `).join('')}
+    </div>
+    <input type="hidden" id="fras-mes-target" value="">
+  `;
+}
+
 async function guardarFacturado(mes,anio,base){
   const key=`${anio}-${String(mes).padStart(2,'0')}`;
   FACTURADO[key]=base;
   // Guardar en Firebase
   await fbSet('facturado','datos',{data:JSON.stringify(FACTURADO),updated:new Date().toISOString()});
-  document.getElementById('fras-res').innerHTML=`<div class="al al-ok">✓ ${MC[mes-1]} ${anio}: <strong>${fmtD(base)}</strong> guardado. La gráfica se ha actualizado.</div>`;
+  const resEl=document.getElementById('fras-res2')||document.getElementById('fras-res');
+  if(resEl)resEl.innerHTML=`<div class="al al-ok">✓ ${MC[mes-1]} ${anio}: <strong>${fmtD(base)}</strong> guardado.</div>`;
   renderD();
+  if(document.querySelector('[data-nav="facturas"]')?.classList.contains('on'))renderFacturas();
 }
 
 // ── EXTRACCIÓN IA CARTA HACIENDA ─────────────────────────────
