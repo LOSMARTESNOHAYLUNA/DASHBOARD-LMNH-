@@ -723,6 +723,10 @@ async function syncAll(){
   const fl=await fbGet('flujo');
   FLUJO=fl&&fl.length?JSON.parse(fl[0].data||'{}'):{...JSON.parse(JSON.stringify(BASE_FLUJO))};
   if(!fl||!fl.length)FLUJO={...JSON.parse(JSON.stringify(BASE_FLUJO))};
+  // Asegurar que campos nuevos (roberto, etc.) existen
+  for(const k of Object.keys(BASE_FLUJO)){
+    if(!FLUJO[k])FLUJO[k]=[...BASE_FLUJO[k]];
+  }
   // Clientes
   const cl=await fbGet('clientes');
   CLIENTES=cl&&cl.length?cl:JSON.parse(JSON.stringify(BASE_CLIENTES));
@@ -758,6 +762,16 @@ async function syncAll(){
   if(facSnap&&facSnap.length&&facSnap[0].data){
     const saved=JSON.parse(facSnap[0].data);
     Object.assign(FACTURADO,saved);
+  }
+  // Aplicar base imponible real al flujo de caja para meses con datos
+  for(const [key,base] of Object.entries(FACTURADO)){
+    const parts=key.split('-');
+    const anio=parseInt(parts[0]),mes=parseInt(parts[1]);
+    if(anio===2026&&FLUJO&&FLUJO.retainers){
+      const i=mes-1;
+      const retainers=FLUJO.retainers[i]||0;
+      FLUJO.web[i]=Math.max(0,Math.round((base-retainers)*100)/100);
+    }
   }
   const mc2=await fbGet('config');
   if(mc2&&mc2.length){
