@@ -544,7 +544,7 @@ const BASE_FLUJO={
   estructura:[1660,1660,1660,1660,1660,1660,1510,1510,1510,1510,1510,1510],
   tecnologia:[219,98,300,193,193,193,193,193,193,193,487,277],
   prestamo: [474,474,474,474,474,474,474,474,474,474,474,474],
-  hacienda: [1849,1734,1733,1553,1553,1553,1336,1336,1336,749,749,749],
+  hacienda: [1849,1734,1733,1553,2286,2286,2069,2069,2069,1482,1482,1482], // +733€/mes desde MAY (aplaz. IVA 303 + IRPF 130 · 1T2026)
   social_ads:[180,180,180,246,246,246,246,246,246,246,246,246],
 };
 
@@ -576,6 +576,34 @@ const BASE_HAC=[
   {id:'h10',mes:'OCT',concepto:'Aplazamiento AEAT',importe:749.27,plazo:'2026-10-31',pagado:false,tipo:'Aplazamiento'},
   {id:'h11',mes:'NOV',concepto:'Aplazamiento AEAT',importe:749.27,plazo:'2026-11-30',pagado:false,tipo:'Aplazamiento'},
   {id:'h12',mes:'DIC',concepto:'Aplazamiento AEAT',importe:749.39,plazo:'2026-12-31',pagado:false,tipo:'Aplazamiento'},
+];
+
+// Aplazamientos 1T 2026 (IVA 303 + IRPF 130) — 12 cuotas desde mayo 2026
+const APL_1T2026=[
+  {id:'h_iva303_1t26_1',mes:'MAY',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (1/12)',importe:568.45,plazo:'2026-05-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_2',mes:'JUN',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (2/12)',importe:568.45,plazo:'2026-06-30',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_3',mes:'JUL',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (3/12)',importe:568.45,plazo:'2026-07-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_4',mes:'AGO',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (4/12)',importe:568.45,plazo:'2026-08-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_5',mes:'SEP',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (5/12)',importe:568.45,plazo:'2026-09-30',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_6',mes:'OCT',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (6/12)',importe:568.45,plazo:'2026-10-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_7',mes:'NOV',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (7/12)',importe:568.45,plazo:'2026-11-30',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_8',mes:'DIC',anio:2026,concepto:'Aplazamiento IVA 303 · 1T2026 (8/12)',importe:568.45,plazo:'2026-12-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_9',mes:'ENE',anio:2027,concepto:'Aplazamiento IVA 303 · 1T2026 (9/12)',importe:568.45,plazo:'2027-01-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_10',mes:'FEB',anio:2027,concepto:'Aplazamiento IVA 303 · 1T2026 (10/12)',importe:568.45,plazo:'2027-02-28',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_11',mes:'MAR',anio:2027,concepto:'Aplazamiento IVA 303 · 1T2026 (11/12)',importe:568.45,plazo:'2027-03-31',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_iva303_1t26_12',mes:'ABR',anio:2027,concepto:'Aplazamiento IVA 303 · 1T2026 (12/12)',importe:568.5,plazo:'2027-04-30',pagado:false,tipo:'Aplazamiento IVA'}
+  {id:'h_irpf130_1t26_1',mes:'MAY',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (1/12)',importe:164.56,plazo:'2026-05-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_2',mes:'JUN',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (2/12)',importe:164.56,plazo:'2026-06-30',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_3',mes:'JUL',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (3/12)',importe:164.56,plazo:'2026-07-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_4',mes:'AGO',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (4/12)',importe:164.56,plazo:'2026-08-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_5',mes:'SEP',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (5/12)',importe:164.56,plazo:'2026-09-30',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_6',mes:'OCT',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (6/12)',importe:164.56,plazo:'2026-10-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_7',mes:'NOV',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (7/12)',importe:164.56,plazo:'2026-11-30',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_8',mes:'DIC',anio:2026,concepto:'Aplazamiento IRPF 130 · 1T2026 (8/12)',importe:164.56,plazo:'2026-12-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_9',mes:'ENE',anio:2027,concepto:'Aplazamiento IRPF 130 · 1T2026 (9/12)',importe:164.56,plazo:'2027-01-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_10',mes:'FEB',anio:2027,concepto:'Aplazamiento IRPF 130 · 1T2026 (10/12)',importe:164.56,plazo:'2027-02-28',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_11',mes:'MAR',anio:2027,concepto:'Aplazamiento IRPF 130 · 1T2026 (11/12)',importe:164.56,plazo:'2027-03-31',pagado:false,tipo:'Aplazamiento IRPF'}
+  {id:'h_irpf130_1t26_12',mes:'ABR',anio:2027,concepto:'Aplazamiento IRPF 130 · 1T2026 (12/12)',importe:164.56,plazo:'2027-04-30',pagado:false,tipo:'Aplazamiento IRPF'}
 ];
 
 const BASE_IRPF=[
@@ -703,6 +731,14 @@ async function syncAll(){
   const hc=await fbGet('hacienda');
   HAC=hc&&hc.length?hc:JSON.parse(JSON.stringify(BASE_HAC));
   if(!hc||!hc.length){for(const h of BASE_HAC)await fbSet('hacienda',h.id,h)}
+  // Añadir aplazamientos 1T2026 si no están ya
+  const hacIds=new Set(HAC.map(h=>h.id));
+  for(const h of APL_1T2026){
+    if(!hacIds.has(h.id)){
+      HAC.push({...h});
+      await fbSet('hacienda',h.id,h);
+    }
+  }
   // IRPF
   const ip=await fbGet('irpf');
   IRPF_DATA=ip&&ip.length?ip:JSON.parse(JSON.stringify(BASE_IRPF));
@@ -1574,7 +1610,13 @@ async function confirmarAplazamientosIA(){
   renderHacienda();
 }
 function renderHacienda(){
-  const hac=(HAC||BASE_HAC).slice().sort((a,b)=>MC.indexOf(a.mes)-MC.indexOf(b.mes));
+  // Ordenar por año y mes
+const MC_IDX=m=>MC.indexOf(m);
+const hac=(HAC||BASE_HAC).slice().sort((a,b)=>{
+  const ay=a.anio||2026,by=b.anio||2026;
+  if(ay!==by)return ay-by;
+  return MC_IDX(a.mes)-MC_IDX(b.mes);
+});
   const total=hac.reduce((s,h)=>s+h.importe,0);
   const pagado=hac.filter(h=>h.pagado).reduce((s,h)=>s+h.importe,0);
   const pendiente=total-pagado;
@@ -1587,8 +1629,8 @@ function renderHacienda(){
   `;
   document.getElementById('hac-list').innerHTML=hac.length?hac.map((h,i)=>{
     const venc=!h.pagado&&new Date(h.plazo)<new Date();
-    return`<div style="display:grid;grid-template-columns:60px 1fr auto auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:.5px solid var(--bd);font-size:12px${hac.length-1===i?';border-bottom:none':''}">
-      <span class="badge ${h.pagado?'b-ok':venc?'b-re':'b-warn'}">${h.mes}</span>
+    return`<div style="display:grid;grid-template-columns:80px 1fr auto auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:.5px solid var(--bd);font-size:12px${hac.length-1===i?';border-bottom:none':''}">
+      <span class="badge ${h.pagado?'b-ok':venc?'b-re':'b-warn'}">${h.mes}${h.anio&&h.anio!==2026?' '+h.anio:''}</span>
       <div>
         <div style="font-weight:500">${h.concepto}</div>
         <div style="font-size:10px;color:var(--tx2)">Plazo: ${h.plazo} · ${h.tipo}</div>
