@@ -1813,16 +1813,92 @@ function renderIrpf(){
         <div style="font-size:11px;color:var(--tx2);margin-top:4px">Ejemplos: factura de proveedor, formación, software, servicios externos.</div>
         <div style="font-size:11px;font-weight:500;color:var(--am);margin-top:4px">⚠️ Consulta siempre con tu gestora antes de aplicar.</div>
       </div>`:''}
-      <button onclick="toggleIrpfPago(${i})" class="btn ${pagadoQ?'btn-re':'btn-li'}" style="padding:4px 10px;font-size:11px;margin-top:8px">${pagadoQ?'Desmarcar pagado':'Marcar como pagado'}</button>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        ${(ipq.estado||'pendiente')==='pendiente'?`
+          <button onclick="pagarIrpfTrimestre(${i})" class="btn btn-li" style="padding:4px 10px;font-size:11px">✅ Marcar como pagado</button>
+          <button onclick="fraccionarIrpfTrimestre(${i})" class="btn btn-p" style="padding:4px 10px;font-size:11px">📅 Fraccionar pago</button>
+        `:(ipq.estado==='pagado')?`
+          <span class="badge b-ok" style="padding:4px 8px">✅ Pagado directamente</span>
+          <button onclick="resetIrpfTrimestre(${i})" class="btn" style="padding:4px 10px;font-size:11px">Deshacer</button>
+        `:`
+          <span class="badge b-info" style="padding:4px 8px">📅 Fraccionado · cuotas en Hacienda</span>
+          <button onclick="resetIrpfTrimestre(${i})" class="btn" style="padding:4px 10px;font-size:11px">Cancelar</button>
+        `}
+      </div>
     </div>`;
   }).join('')}
   </div>`;
 }
 
-async function toggleIrpfPago(i){
-  IRPF_DATA[i].pagado=!IRPF_DATA[i].pagado;
-  await fbSet('irpf',IRPF_DATA[i].id||IRPF_DATA[i]._fbid||('i'+i),IRPF_DATA[i]);
-  renderIrpf();
+async function pagarIrpfTrimestre(i){
+  const q=IRPF_DATA[i];if(!q)return;
+  q.pagado=true;q.estado='pagado';
+  // Eliminar cuotas fraccionadas de Hacienda si existían
+  const prefijo=`irpf_t${i+1}_2026_`;
+  HAC=HAC.filter(h=>!h.id.startsWith(prefijo));
+  const snap=await fbGet('hacienda');
+  if(snap)for(const h of snap.filter(h=>h.id&&h.id.startsWith(prefijo)))await fbDel('hacienda',h.id);
+  await fbSet('irpf',q.id||('i'+(i+1)),q);
+  renderIrpf();renderHacienda();
+}
+
+async function fraccionarIrpfTrimestre(i){
+  const q=IRPF_DATA[i];if(!q)return;
+  // Calcular pago del trimestre desde proyección del flujo
+  const trimRanges=[[0,3],[3,6],[6,9],[9,12]];
+  const plazosInicio=['2026-05','2026-08','2026-11','2027-02']; // empiezan mes siguiente al vencimiento
+  let acumIng=0,acumGst=0,pagAnt=0;
+  for(let ti=0;ti<=i;ti++){
+    const [ini,fin]=trimRanges[ti];
+    for(let m=ini;m<fin;m++){acumIng+=ingF(m);acumGst+=gstF(m);}
+  }
+  const rtoAcum=Math.max(0,acumIng-acumGst);
+  const irpfAcum=Math.round(rtoAcum*0.20*100)/100;
+  for(let ti=0;ti<i;ti++){
+    const [ini,fin]=trimRanges[ti];
+    let aIng=0,aGst=0;
+    for(let m=0;m<fin;m++){aIng+=ingF(m);aGst+=gstF(m);}
+    pagAnt+=Math.max(0,Math.round((Math.max(0,aIng-aGst)*0.20-pagAnt)*100)/100);
+  }
+  const pagoT=Math.max(0,Math.round((irpfAcum-pagAnt)*100)/100);
+  if(pagoT<=0){alert('El pago fraccionado de este trimestre es 0€ — no hay nada que fraccionar.');return}
+
+  // Crear 12 cuotas mensuales
+  const cuota=Math.round(pagoT/12*100)/100;
+  const ultima=Math.round((pagoT-cuota*11)*100)/100;
+  const prefijo=`irpf_t${i+1}_2026_`;
+  const [anioI,mesI]=plazosInicio[i].split('-').map(Number);
+  const hacIds=new Set(HAC.map(h=>h.id));
+  const mesesNombres=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+  const diasMes=[31,28,31,30,31,30,31,31,30,31,30,31];
+
+  for(let k=0;k<12;k++){
+    const totalMes=mesI-1+k;
+    const anio=anioI+Math.floor(totalMes/12);
+    const mes=totalMes%12;
+    const mesNombre=mesesNombres[mes];
+    const plazo=`${anio}-${String(mes+1).padStart(2,'0')}-${diasMes[mes]}`;
+    const id=prefijo+(k+1);
+    const entry={id,mes:mesNombre,anio,concepto:`Fracc. IRPF ${['1T','2T','3T','4T'][i]} 2026 (${k+1}/12)`,importe:k===11?ultima:cuota,plazo,pagado:new Date(plazo)<new Date(),tipo:'Fraccionamiento IRPF'};
+    if(!hacIds.has(id)){HAC.push(entry);await fbSet('hacienda',id,entry);}
+  }
+  HAC.sort((a,b)=>{const ay=a.anio||2026,by=b.anio||2026;if(ay!==by)return ay-by;return MC.indexOf(a.mes)-MC.indexOf(b.mes);});
+  q.pagado=false;q.estado='fraccionado';
+  await fbSet('irpf',q.id||('i'+(i+1)),q);
+  renderIrpf();renderHacienda();
+  // Navegar a Hacienda para confirmación visual
+  alert(`✓ ${pagoT.toFixed(2)}€ fraccionados en 12 cuotas de ${cuota.toFixed(2)}€/mes. Puedes verlo en la pestaña Hacienda.`);
+}
+
+async function resetIrpfTrimestre(i){
+  const q=IRPF_DATA[i];if(!q)return;
+  q.pagado=false;q.estado='pendiente';
+  const prefijo=`irpf_t${i+1}_2026_`;
+  HAC=HAC.filter(h=>!h.id.startsWith(prefijo));
+  const snap=await fbGet('hacienda');
+  if(snap)for(const h of snap.filter(h=>h.id&&h.id.startsWith(prefijo)))await fbDel('hacienda',h.id);
+  await fbSet('irpf',q.id||('i'+(i+1)),q);
+  renderIrpf();renderHacienda();
 }
 async function saveIrpf(){
   for(let i=0;i<IRPF_DATA.length;i++){
